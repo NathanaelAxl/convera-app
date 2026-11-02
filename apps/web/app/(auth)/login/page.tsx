@@ -1,15 +1,28 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
+import { AuthCard, AuthFormSkeleton, AuthLink } from "@/components/app/auth/auth-card"
+import { LoginForm } from "@/components/app/auth/login-form"
 import { MockSessionPanel } from "@/components/app/mock-session-panel"
-import { PagePlaceholder } from "@/components/app/page-placeholder"
 
 export const metadata: Metadata = { title: "Masuk" }
 
 export default function LoginPage() {
   return (
     <>
-      <PagePlaceholder title="Masuk" description="Masuk ke akun Convera Anda." feature="Fase 1 — Autentikasi & Akun" />
+      <AuthCard
+        title="Masuk"
+        description="Masuk untuk memantau event konversi proyek Anda."
+        footer={
+          <p>
+            Belum punya akun? <AuthLink href="/register">Daftar</AuthLink>
+          </p>
+        }
+      >
+        <Suspense fallback={<AuthFormSkeleton />}>
+          <LoginForm />
+        </Suspense>
+      </AuthCard>
       <Suspense>
         <MockSessionPanel />
       </Suspense>

@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Daftar akun baru dan langsung masuk */
+        post: operations["register"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Masuk dengan email dan password */
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -38,6 +72,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/forgot-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Minta tautan reset password lewat email */
+        post: operations["forgotPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ganti password memakai token dari tautan reset */
+        post: operations["resetPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me": {
         parameters: {
             query?: never;
@@ -48,6 +116,23 @@ export interface paths {
         /** Data user yang sedang login */
         get: operations["getMe"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Ganti password; sesi lain dicabut, sesi saat ini tetap aktif */
+        put: operations["changePassword"];
         post?: never;
         delete?: never;
         options?: never;
@@ -133,7 +218,7 @@ export interface components {
             /** @example true */
             refreshed: boolean;
         };
-        User: {
+        UserProfile: {
             /**
              * Format: uuid
              * @example 5b1c8f4e-2a7d-4c1e-9a0b-1f2e3d4c5b6a
@@ -152,11 +237,74 @@ export interface components {
              */
             phone: string;
             role: components["schemas"]["UserRole"];
+        };
+        /** @description Respons `GET /me` dan `POST /auth/register`. */
+        User: components["schemas"]["UserProfile"] & {
             /**
              * Format: date-time
              * @example 2026-11-02T03:15:00Z
              */
             created_at: string;
+        };
+        /** @description Respons `POST /auth/login`. */
+        LoggedInUser: components["schemas"]["UserProfile"] & {
+            /**
+             * Format: date-time
+             * @example 2026-11-02T03:20:00Z
+             */
+            last_login_at: string;
+        };
+        /** @description Minimal 8 karakter [asumsi FR-01], maksimal 128. */
+        Password: string;
+        RegisterRequest: {
+            /** @example Rina Saputri */
+            name: string;
+            /**
+             * Format: email
+             * @example rina@contoh.id
+             */
+            email: string;
+            /**
+             * @description Boleh berformat 08xx, 62xx, atau +62, dengan spasi, titik, tanda hubung, atau kurung.
+             *     Server menormalkan ke `62xxxxxxxxxx` (62 + 8–13 digit).
+             * @example 081234567890
+             */
+            phone: string;
+            password: components["schemas"]["Password"];
+        };
+        LoginRequest: {
+            /**
+             * Format: email
+             * @example rina@contoh.id
+             */
+            email: string;
+            /** @example rahasia-kuat-123 */
+            password: string;
+        };
+        ForgotPasswordRequest: {
+            /**
+             * Format: email
+             * @example rina@contoh.id
+             */
+            email: string;
+        };
+        ResetPasswordRequest: {
+            /** @example q9Xc3...tokendaritautan */
+            token: string;
+            new_password: components["schemas"]["Password"];
+        };
+        ChangePasswordRequest: {
+            /** @example rahasia-kuat-123 */
+            current_password: string;
+            new_password: components["schemas"]["Password"];
+        };
+        MessageResult: {
+            /** @example Jika email terdaftar, tautan reset sudah dikirim. */
+            message: string;
+        };
+        ResetPasswordResult: {
+            /** @example true */
+            reset: boolean;
         };
         Project: {
             /**
@@ -325,6 +473,67 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    register: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Akun dibuat dan cookie sesi dipasang. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["User"];
+                    };
+                };
+            };
+            /** @description Email sudah terdaftar (`CONFLICT`, `details` berisi field `email`). */
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Berhasil, cookie sesi dipasang. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["LoggedInUser"];
+                    };
+                };
+            };
+            /** @description Email atau password salah. Pesannya umum agar tidak membocorkan email yang terdaftar. */
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["ValidationError"];
+            /** @description Lebih dari 5 percobaan dalam 15 menit per IP + email (NFR-12). */
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     refreshSession: {
         parameters: {
             query?: never;
@@ -367,6 +576,64 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    forgotPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForgotPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Selalu sama, baik email terdaftar maupun tidak. Tautan berlaku 60 menit dan sekali pakai. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["MessageResult"];
+                    };
+                };
+            };
+            422: components["responses"]["ValidationError"];
+            /** @description Lebih dari 3 permintaan per jam per email (NFR-12). */
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    resetPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Password diganti dan semua sesi dicabut. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ResetPasswordResult"];
+                    };
+                };
+            };
+            /** @description Token tidak valid, kedaluwarsa, atau sudah dipakai (`BAD_REQUEST`). */
+            400: components["responses"]["BadRequest"];
+            422: components["responses"]["ValidationError"];
+        };
+    };
     getMe: {
         parameters: {
             query?: never;
@@ -388,6 +655,31 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Password diganti dan sesi lain dicabut. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Password lama salah (`details` berisi field `current_password`) atau password baru tidak memenuhi syarat. */
+            422: components["responses"]["ValidationError"];
         };
     };
     listProjects: {

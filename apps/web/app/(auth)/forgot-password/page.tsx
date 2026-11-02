@@ -1,15 +1,21 @@
 import type { Metadata } from "next"
 
-import { PagePlaceholder } from "@/components/app/page-placeholder"
+import { AuthCard, AuthLink } from "@/components/app/auth/auth-card"
+import { ForgotPasswordForm } from "@/components/app/auth/forgot-password-form"
 
 export const metadata: Metadata = { title: "Lupa password" }
 
-export default function Page() {
+export default function ForgotPasswordPage() {
   return (
-    <PagePlaceholder
+    <AuthCard
       title="Lupa password"
-      description="Kirim tautan reset password ke email Anda."
-      feature="Fase 1 — Autentikasi & Akun"
-    />
+      footer={
+        <p>
+          Ingat password Anda? <AuthLink href="/login">Masuk</AuthLink>
+        </p>
+      }
+    >
+      <ForgotPasswordForm />
+    </AuthCard>
   )
 }

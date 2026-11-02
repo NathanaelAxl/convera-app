@@ -14,7 +14,7 @@ info:
     - Request mutasi (POST/PUT/PATCH/DELETE) wajib mengirim header `X-CSRF-Token` yang sama dengan cookie `csrf_token`.
     - `{slug}` adalah `projects.slug`; proyek yang tidak ada atau bukan milik user dijawab 404.
 
-    Endpoint fitur ditambahkan per fitur. Saat ini hanya endpoint yang dipakai layout aplikasi.
+    Endpoint fitur ditambahkan per fitur.
 
 servers:
   - url: /api/v1
@@ -31,6 +31,71 @@ tags:
     description: Proyek (PRD 7.4)
 
 paths:
+  /auth/register:
+    post:
+      tags: [auth]
+      operationId: register
+      summary: Daftar akun baru dan langsung masuk
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Akun dibuat dan cookie sesi dipasang.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+        "409":
+          $ref: "#/components/responses/Conflict"
+          description: Email sudah terdaftar (`CONFLICT`, `details` berisi field `email`).
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /auth/login:
+    post:
+      tags: [auth]
+      operationId: login
+      summary: Masuk dengan email dan password
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Berhasil, cookie sesi dipasang.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/LoggedInUser"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+          description: Email atau password salah. Pesannya umum agar tidak membocorkan email yang terdaftar.
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+          description: Lebih dari 5 percobaan dalam 15 menit per IP + email (NFR-12).
+
   /auth/refresh:
     post:
       tags: [auth]
@@ -67,6 +132,66 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /auth/forgot-password:
+    post:
+      tags: [auth]
+      operationId: forgotPassword
+      summary: Minta tautan reset password lewat email
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordRequest"
+      responses:
+        "202":
+          description: Selalu sama, baik email terdaftar maupun tidak. Tautan berlaku 60 menit dan sekali pakai.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/MessageResult"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+          description: Lebih dari 3 permintaan per jam per email (NFR-12).
+
+  /auth/reset-password:
+    post:
+      tags: [auth]
+      operationId: resetPassword
+      summary: Ganti password memakai token dari tautan reset
+      security:
+        - csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+      responses:
+        "200":
+          description: Password diganti dan semua sesi dicabut.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ResetPasswordResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+          description: Token tidak valid, kedaluwarsa, atau sudah dipakai (`BAD_REQUEST`).
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
   /me:
     get:
       tags: [account]
@@ -85,6 +210,29 @@ paths:
                     $ref: "#/components/schemas/User"
         "401":
           $ref: "#/components/responses/Unauthorized"
+
+  /me/password:
+    put:
+      tags: [account]
+      operationId: changePassword
+      summary: Ganti password; sesi lain dicabut, sesi saat ini tetap aktif
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "204":
+          description: Password diganti dan sesi lain dicabut.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+          description: Password lama salah (`details` berisi field `current_password`) atau password baru tidak memenuhi syarat.
 
   /projects:
     get:
@@ -370,9 +518,9 @@ components:
           type: boolean
           example: true
 
-    User:
+    UserProfile:
       type: object
-      required: [id, name, email, phone, role, created_at]
+      required: [id, name, email, phone, role]
       properties:
         id:
           type: string
@@ -392,10 +540,124 @@ components:
           example: "6281234567890"
         role:
           $ref: "#/components/schemas/UserRole"
-        created_at:
+
+    User:
+      description: Respons `GET /me` dan `POST /auth/register`.
+      allOf:
+        - $ref: "#/components/schemas/UserProfile"
+        - type: object
+          required: [created_at]
+          properties:
+            created_at:
+              type: string
+              format: date-time
+              example: "2026-11-02T03:15:00Z"
+
+    LoggedInUser:
+      description: Respons `POST /auth/login`.
+      allOf:
+        - $ref: "#/components/schemas/UserProfile"
+        - type: object
+          required: [last_login_at]
+          properties:
+            last_login_at:
+              type: string
+              format: date-time
+              example: "2026-11-02T03:20:00Z"
+
+    Password:
+      type: string
+      minLength: 8
+      maxLength: 128
+      description: Minimal 8 karakter [asumsi FR-01], maksimal 128.
+
+    RegisterRequest:
+      type: object
+      required: [name, email, phone, password]
+      properties:
+        name:
           type: string
-          format: date-time
-          example: "2026-11-02T03:15:00Z"
+          minLength: 1
+          maxLength: 100
+          example: Rina Saputri
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: rina@contoh.id
+        phone:
+          type: string
+          maxLength: 20
+          description: |
+            Boleh berformat 08xx, 62xx, atau +62, dengan spasi, titik, tanda hubung, atau kurung.
+            Server menormalkan ke `62xxxxxxxxxx` (62 + 8–13 digit).
+          example: "081234567890"
+        password:
+          $ref: "#/components/schemas/Password"
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: rina@contoh.id
+        password:
+          type: string
+          minLength: 1
+          maxLength: 128
+          example: rahasia-kuat-123
+
+    ForgotPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+          maxLength: 254
+          example: rina@contoh.id
+
+    ResetPasswordRequest:
+      type: object
+      required: [token, new_password]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          example: q9Xc3...tokendaritautan
+        new_password:
+          $ref: "#/components/schemas/Password"
+
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+          minLength: 1
+          maxLength: 128
+          example: rahasia-kuat-123
+        new_password:
+          $ref: "#/components/schemas/Password"
+
+    MessageResult:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: Jika email terdaftar, tautan reset sudah dikirim.
+
+    ResetPasswordResult:
+      type: object
+      required: [reset]
+      properties:
+        reset:
+          type: boolean
+          example: true
 
     Project:
       type: object

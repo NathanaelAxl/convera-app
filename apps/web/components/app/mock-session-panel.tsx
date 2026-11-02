@@ -6,16 +6,11 @@ import { useRouter, useSearchParams } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { authKeys } from "@/lib/api/auth"
 import { isMocked } from "@/lib/api/config"
-import { setMockSession, type MockSession } from "@/lib/api/mocks/session"
+import { MOCK_ACCOUNTS, signInAs } from "@/lib/api/mocks/auth"
+import { safeNextPath } from "@/lib/navigation"
 
-/** Hanya path internal yang boleh jadi tujuan setelah masuk. */
-function safeNext(next: string | null) {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/projects"
-}
-
-/** Masuk tanpa backend selama modul `auth` masih di daftar mock (`lib/api/config.ts`). */
+/** Bantuan masuk tanpa backend selama modul `auth` masih di daftar mock (`lib/api/config.ts`). */
 export function MockSessionPanel() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -23,10 +18,10 @@ export function MockSessionPanel() {
 
   if (!isMocked("auth")) return null
 
-  function signIn(session: Exclude<MockSession, "signed-out">) {
-    setMockSession(session)
-    queryClient.removeQueries({ queryKey: authKeys.me })
-    router.replace(safeNext(searchParams.get("next")))
+  function signIn(role: keyof typeof MOCK_ACCOUNTS) {
+    signInAs(role)
+    queryClient.clear()
+    router.replace(safeNextPath(searchParams.get("next")))
   }
 
   return (
@@ -37,11 +32,13 @@ export function MockSessionPanel() {
           Mode mock
         </CardTitle>
         <CardDescription>
-          Modul autentikasi masih memakai data mock. Pilih peran untuk masuk tanpa backend.
+          Modul autentikasi masih memakai data mock. Masuk dengan {MOCK_ACCOUNTS.user.email} /{" "}
+          {MOCK_ACCOUNTS.user.password} atau {MOCK_ACCOUNTS.admin.email} / {MOCK_ACCOUNTS.admin.password}, atau
+          langsung pilih peran di bawah.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-2 sm:flex-row">
-        <Button onClick={() => signIn("user")}>
+        <Button variant="outline" onClick={() => signIn("user")}>
           Masuk sebagai User
         </Button>
         <Button variant="outline" onClick={() => signIn("admin")}>

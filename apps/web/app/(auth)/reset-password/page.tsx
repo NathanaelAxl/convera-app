@@ -1,15 +1,25 @@
 import type { Metadata } from "next"
+import { Suspense } from "react"
 
-import { PagePlaceholder } from "@/components/app/page-placeholder"
+import { AuthCard, AuthFormSkeleton, AuthLink } from "@/components/app/auth/auth-card"
+import { ResetPasswordForm } from "@/components/app/auth/reset-password-form"
 
 export const metadata: Metadata = { title: "Reset password" }
 
-export default function Page() {
+export default function ResetPasswordPage() {
   return (
-    <PagePlaceholder
-      title="Reset password"
-      description="Buat password baru."
-      feature="Fase 1 — Autentikasi & Akun"
-    />
+    <AuthCard
+      title="Buat password baru"
+      description="Password baru berlaku untuk semua perangkat. Semua sesi yang sedang aktif akan dikeluarkan."
+      footer={
+        <p>
+          Kembali ke <AuthLink href="/login">halaman masuk</AuthLink>
+        </p>
+      }
+    >
+      <Suspense fallback={<AuthFormSkeleton />}>
+        <ResetPasswordForm />
+      </Suspense>
+    </AuthCard>
   )
 }
