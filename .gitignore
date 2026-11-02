@@ -1,0 +1,11 @@
+# dependencies
+node_modules/
+
+# env & rahasia: jangan pernah di-commit
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db

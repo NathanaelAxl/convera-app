@@ -47,3 +47,13 @@ SaaS yang mengubah percakapan WhatsApp bisnis menjadi event konversi Meta lewat 
 
 ## Perintah
 <!-- Diisi oleh Claude Code setelah /setup-frontend dan /setup-backend: cara install, run dev, test, generate types, migration, seed. -->
+
+### Frontend (`apps/web`, PowerShell)
+- Install: `cd apps/web; npm install`
+- Konfigurasi lokal: `Copy-Item .env.example .env.local` (isi `API_URL`, default `http://localhost:8080`)
+- Run dev: `npm run dev` → http://localhost:3000. Selama modul ada di `lib/api/config.ts`, data memakai mock; masuk/keluar mock lewat panel di `/login`.
+- Generate tipe API dari `services/api/openapi.yaml`: `npm run gen:api` (menulis `lib/api/schema.d.ts`; jalankan setiap kali `openapi.yaml` berubah)
+- Lint: `npm run lint`
+- Typecheck: `npm run typecheck`
+- Build produksi: `npm run build`, lalu `npm run start`
+- Next.js 16.4 berbeda dari versi lama (Cache Components aktif). Baca panduan di `apps/web/node_modules/next/dist/docs/` sebelum memakai API Next.js yang belum pernah dipakai di repo.

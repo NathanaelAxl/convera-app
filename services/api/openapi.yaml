@@ -1,0 +1,424 @@
+openapi: 3.1.0
+
+info:
+  title: Convera API
+  version: 0.1.0
+  description: |
+    Kontrak REST API Convera, diterjemahkan dari PRD.md bagian 7.
+
+    Konvensi (PRD 7.1):
+    - JSON `snake_case`, waktu ISO 8601 UTC, tanggal `YYYY-MM-DD` (Asia/Jakarta), uang berupa angka dalam IDR.
+    - Respons sukses dibungkus `{ "data": ... }`; daftar berpaginasi menambah `meta`.
+    - Respons error memakai `{ "error": { "code", "message", "details" } }`.
+    - Autentikasi lewat cookie httpOnly `access_token` (JWT 15 menit) dan `refresh_token` (30 hari).
+    - Request mutasi (POST/PUT/PATCH/DELETE) wajib mengirim header `X-CSRF-Token` yang sama dengan cookie `csrf_token`.
+    - `{slug}` adalah `projects.slug`; proyek yang tidak ada atau bukan milik user dijawab 404.
+
+    Endpoint fitur ditambahkan per fitur. Saat ini hanya endpoint yang dipakai layout aplikasi.
+
+servers:
+  - url: /api/v1
+
+security:
+  - cookieAuth: []
+
+tags:
+  - name: auth
+    description: Autentikasi (PRD 7.2)
+  - name: account
+    description: Akun (PRD 7.3)
+  - name: projects
+    description: Proyek (PRD 7.4)
+
+paths:
+  /auth/refresh:
+    post:
+      tags: [auth]
+      operationId: refreshSession
+      summary: Perbarui access token memakai cookie refresh_token
+      security:
+        - refreshCookie: []
+          csrfToken: []
+      responses:
+        "200":
+          description: Token baru dipasang di cookie.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/RefreshResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      operationId: logout
+      summary: Cabut sesi dan hapus cookie
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      responses:
+        "204":
+          description: Sesi dicabut dan cookie dihapus.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /me:
+    get:
+      tags: [account]
+      operationId: getMe
+      summary: Data user yang sedang login
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /projects:
+    get:
+      tags: [projects]
+      operationId: listProjects
+      summary: Daftar proyek milik user
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: access_token
+      description: JWT 15 menit, cookie httpOnly.
+    refreshCookie:
+      type: apiKey
+      in: cookie
+      name: refresh_token
+      description: Refresh token 30 hari, cookie httpOnly, di-rotate setiap dipakai.
+    csrfToken:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: Wajib untuk POST/PUT/PATCH/DELETE; nilainya sama dengan cookie `csrf_token` (double-submit).
+
+  parameters:
+    ProjectSlug:
+      name: slug
+      in: path
+      required: true
+      description: "`projects.slug`"
+      schema:
+        type: string
+        maxLength: 120
+    Period:
+      name: period
+      in: query
+      required: false
+      description: Preset periode. Untuk `custom`, `from` dan `to` wajib (maksimal 366 hari).
+      schema:
+        $ref: "#/components/schemas/Period"
+    PeriodFrom:
+      name: from
+      in: query
+      required: false
+      description: Tanggal awal (Asia/Jakarta), wajib bila `period=custom`.
+      schema:
+        type: string
+        format: date
+    PeriodTo:
+      name: to
+      in: query
+      required: false
+      description: Tanggal akhir (Asia/Jakarta), wajib bila `period=custom`.
+      schema:
+        type: string
+        format: date
+    Page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PerPage:
+      name: per_page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+
+  responses:
+    BadRequest:
+      description: Format request salah (`BAD_REQUEST`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Unauthorized:
+      description: Belum login, sesi kedaluwarsa, atau signature salah (`UNAUTHORIZED`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    SubscriptionExpired:
+      description: Langganan proyek habis (`SUBSCRIPTION_EXPIRED`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Bukan admin (`FORBIDDEN`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    NotFound:
+      description: Tidak ditemukan, termasuk proyek milik user lain (`NOT_FOUND`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Conflict:
+      description: Konflik atau duplikat (`CONFLICT`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ValidationError:
+      description: Validasi gagal (`VALIDATION_ERROR`), detail per field di `error.details`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    TooManyRequests:
+      description: Rate limit (`RATE_LIMITED`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+  schemas:
+    ErrorCode:
+      type: string
+      description: |
+        Sumber tunggal kode error API. Backend hanya boleh mengirim kode di daftar ini;
+        kode baru ditambahkan di sini dulu, lalu tipe frontend di-generate ulang.
+        - `BAD_REQUEST` (400): format request salah, misalnya JSON rusak.
+        - `UNAUTHORIZED` (401): belum login, sesi kedaluwarsa, atau refresh token tidak valid.
+        - `SUBSCRIPTION_EXPIRED` (402): langganan proyek habis.
+        - `FORBIDDEN` (403): bukan admin.
+        - `NOT_FOUND` (404): tidak ditemukan, termasuk proyek milik user lain.
+        - `CONFLICT` (409): konflik atau duplikat.
+        - `VALIDATION_ERROR` (422): validasi gagal, detail per field di `details`.
+        - `RATE_LIMITED` (429): terlalu banyak permintaan.
+      enum:
+        - BAD_REQUEST
+        - UNAUTHORIZED
+        - SUBSCRIPTION_EXPIRED
+        - FORBIDDEN
+        - NOT_FOUND
+        - CONFLICT
+        - VALIDATION_ERROR
+        - RATE_LIMITED
+
+    ErrorDetail:
+      type: object
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          example: pixel_id
+        message:
+          type: string
+          example: Pixel ID hanya boleh berisi angka.
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          $ref: "#/components/schemas/ErrorCode"
+        message:
+          type: string
+          example: Data tidak valid.
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/ErrorDetail"
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/Error"
+
+    PaginationMeta:
+      type: object
+      required: [page, per_page, total, total_pages]
+      properties:
+        page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 50
+        total:
+          type: integer
+          example: 1
+        total_pages:
+          type: integer
+          example: 1
+
+    Period:
+      type: string
+      enum:
+        - today
+        - yesterday
+        - last_3_days
+        - last_7_days
+        - last_14_days
+        - last_30_days
+        - last_90_days
+        - this_week
+        - last_week
+        - this_month
+        - last_month
+        - custom
+
+    UserRole:
+      type: string
+      enum: [user, admin]
+
+    BusinessCategory:
+      type: string
+      enum: [general, health, ecommerce, education, property, fnb, service, travel, finance]
+
+    WaConnectionType:
+      type: string
+      enum: [waba, qr]
+
+    SubscriptionStatus:
+      type: string
+      enum: [trial, active, expired]
+
+    RefreshResult:
+      type: object
+      required: [refreshed]
+      properties:
+        refreshed:
+          type: boolean
+          example: true
+
+    User:
+      type: object
+      required: [id, name, email, phone, role, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 5b1c8f4e-2a7d-4c1e-9a0b-1f2e3d4c5b6a
+        name:
+          type: string
+          maxLength: 100
+          example: Rina Saputri
+        email:
+          type: string
+          format: email
+          example: rina@contoh.id
+        phone:
+          type: string
+          description: Format 62xxxxxxxxxx.
+          example: "6281234567890"
+        role:
+          $ref: "#/components/schemas/UserRole"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-11-02T03:15:00Z"
+
+    Project:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+        - business_category
+        - is_active
+        - wa_connection_type
+        - wa_provider
+        - webhook_url
+        - subscription_status
+        - trial_ends_at
+        - subscription_ends_at
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 0f8e2c1a-6b3d-4f5e-8a9b-7c6d5e4f3a2b
+        name:
+          type: string
+          maxLength: 100
+          example: Toko Dummy & Co. 2026!
+        slug:
+          type: string
+          maxLength: 120
+          example: toko-dummy-co-2026
+        business_category:
+          $ref: "#/components/schemas/BusinessCategory"
+        is_active:
+          type: boolean
+          example: true
+        wa_connection_type:
+          $ref: "#/components/schemas/WaConnectionType"
+        wa_provider:
+          type: string
+          maxLength: 30
+          example: generic
+        webhook_url:
+          type: string
+          format: uri
+          example: https://api.example.com/api/v1/webhooks/wa/k7Qm2xPz9LwR4tVb8NcY1sDf6GhJ3aEu
+        subscription_status:
+          $ref: "#/components/schemas/SubscriptionStatus"
+        trial_ends_at:
+          type: string
+          format: date-time
+          example: "2026-11-09T03:16:00Z"
+        subscription_ends_at:
+          type: ["string", "null"]
+          format: date-time
+          example: null
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-11-02T03:16:00Z"
