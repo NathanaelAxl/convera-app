@@ -35,15 +35,23 @@ SaaS yang mengubah percakapan WhatsApp bisnis menjadi event konversi Meta lewat 
 - Filter halaman (periode, jenis event, halaman tabel, urutan, tab) selalu disimpan di query string.
 - Pakai komponen bersama dari PRD 8.2 (`PeriodFilter`, `KpiCard`, `DataTable`, `EmptyState`, `ConfirmDialog`, `CopyField`, `SecretInput`, `StatusBadge`, dst.) sebelum membuat komponen baru.
 - Warna lewat token CSS shadcn/ui agar mudah diganti; dukung tema terang dan gelap.
+- Setiap komponen shadcn yang baru dipasang di `components/ui` wajib diberi varian `touch:` (didefinisikan di `app/globals.css`) agar target sentuh minimal 44 px (NFR-16), misalnya `touch:h-11`, `touch:size-11`, atau `touch:min-h-11`.
 
 ## Aturan backend (`services/api`)
 - Format respons dan error persis PRD 7.1. JSON `snake_case`, waktu ISO 8601 UTC, tanggal `YYYY-MM-DD` Asia/Jakarta.
+- `error.code` wajib memakai enum `ErrorCode` di `services/api/openapi.yaml`. Kode baru ditambahkan di sana dulu (lalu `npm run gen:api` di `apps/web`), baru dipakai di kode Go.
 - Setiap endpoint `/projects/{slug}/...` wajib mengecek kepemilikan proyek; proyek yang tidak ada atau milik user lain dijawab 404 (bukan 403). Endpoint `/admin/*` wajib role admin (403).
 - Kolom berakhiran `_enc` dienkripsi AES-256-GCM dengan kunci dari environment variable; nilai rahasia tidak pernah dikembalikan utuh di respons maupun log.
 - Isi pesan WhatsApp tidak pernah disimpan ke database maupun log.
 - Webhook: verifikasi signature dulu, idempoten berdasarkan ID pesan, jawab cepat; pengiriman ke Meta hanya dilakukan worker.
 - Waktu disimpan `TIMESTAMPTZ` UTC; agregasi memakai `AT TIME ZONE 'Asia/Jakarta'`. Nomor HP disimpan format `62xxxxxxxxxx`. Uang `NUMERIC(14,2)` IDR.
 - Setiap endpoint punya test (sukses, validasi gagal, tanpa login, akses proyek milik user lain).
+
+## Aturan Git
+- Setiap fitur dikerjakan di branch sendiri yang dibuat dari `main`, dengan awalan sesuai tahap: `fe/` (frontend), `be/` (backend), atau `int/` (integrasi). Contoh: `fe/autentikasi-akun`.
+- Commit setelah fitur selesai.
+- Merge ke `main` hanya setelah saya konfirmasi.
+- Jangan push kecuali saya minta.
 
 ## Perintah
 <!-- Diisi oleh Claude Code setelah /setup-frontend dan /setup-backend: cara install, run dev, test, generate types, migration, seed. -->

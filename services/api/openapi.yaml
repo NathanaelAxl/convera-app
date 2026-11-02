@@ -212,6 +212,18 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    PayloadTooLarge:
+      description: File atau payload terlalu besar (`PAYLOAD_TOO_LARGE`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    UnsupportedMediaType:
+      description: Tipe file tidak didukung (`UNSUPPORTED_MEDIA_TYPE`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     ValidationError:
       description: Validasi gagal (`VALIDATION_ERROR`), detail per field di `error.details`.
       content:
@@ -220,6 +232,18 @@ components:
             $ref: "#/components/schemas/ErrorResponse"
     TooManyRequests:
       description: Rate limit (`RATE_LIMITED`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: Error server yang tidak terduga (`INTERNAL_ERROR`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    ExternalServiceError:
+      description: Layanan eksternal gagal (`EXTERNAL_SERVICE_ERROR`).
       content:
         application/json:
           schema:
@@ -237,8 +261,12 @@ components:
         - `FORBIDDEN` (403): bukan admin.
         - `NOT_FOUND` (404): tidak ditemukan, termasuk proyek milik user lain.
         - `CONFLICT` (409): konflik atau duplikat.
+        - `PAYLOAD_TOO_LARGE` (413): file atau payload terlalu besar.
+        - `UNSUPPORTED_MEDIA_TYPE` (415): tipe file tidak didukung.
         - `VALIDATION_ERROR` (422): validasi gagal, detail per field di `details`.
         - `RATE_LIMITED` (429): terlalu banyak permintaan.
+        - `INTERNAL_ERROR` (500): error server yang tidak terduga.
+        - `EXTERNAL_SERVICE_ERROR` (502): layanan eksternal (Meta, SMTP, dll.) gagal.
       enum:
         - BAD_REQUEST
         - UNAUTHORIZED
@@ -246,8 +274,12 @@ components:
         - FORBIDDEN
         - NOT_FOUND
         - CONFLICT
+        - PAYLOAD_TOO_LARGE
+        - UNSUPPORTED_MEDIA_TYPE
         - VALIDATION_ERROR
         - RATE_LIMITED
+        - INTERNAL_ERROR
+        - EXTERNAL_SERVICE_ERROR
 
     ErrorDetail:
       type: object

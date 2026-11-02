@@ -85,11 +85,15 @@ export interface components {
          *     - `FORBIDDEN` (403): bukan admin.
          *     - `NOT_FOUND` (404): tidak ditemukan, termasuk proyek milik user lain.
          *     - `CONFLICT` (409): konflik atau duplikat.
+         *     - `PAYLOAD_TOO_LARGE` (413): file atau payload terlalu besar.
+         *     - `UNSUPPORTED_MEDIA_TYPE` (415): tipe file tidak didukung.
          *     - `VALIDATION_ERROR` (422): validasi gagal, detail per field di `details`.
          *     - `RATE_LIMITED` (429): terlalu banyak permintaan.
+         *     - `INTERNAL_ERROR` (500): error server yang tidak terduga.
+         *     - `EXTERNAL_SERVICE_ERROR` (502): layanan eksternal (Meta, SMTP, dll.) gagal.
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "UNAUTHORIZED" | "SUBSCRIPTION_EXPIRED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "VALIDATION_ERROR" | "RATE_LIMITED";
+        ErrorCode: "BAD_REQUEST" | "UNAUTHORIZED" | "SUBSCRIPTION_EXPIRED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "PAYLOAD_TOO_LARGE" | "UNSUPPORTED_MEDIA_TYPE" | "VALIDATION_ERROR" | "RATE_LIMITED" | "INTERNAL_ERROR" | "EXTERNAL_SERVICE_ERROR";
         ErrorDetail: {
             /** @example pixel_id */
             field: string;
@@ -248,6 +252,24 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description File atau payload terlalu besar (`PAYLOAD_TOO_LARGE`). */
+        PayloadTooLarge: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Tipe file tidak didukung (`UNSUPPORTED_MEDIA_TYPE`). */
+        UnsupportedMediaType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Validasi gagal (`VALIDATION_ERROR`), detail per field di `error.details`. */
         ValidationError: {
             headers: {
@@ -259,6 +281,24 @@ export interface components {
         };
         /** @description Rate limit (`RATE_LIMITED`). */
         TooManyRequests: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Error server yang tidak terduga (`INTERNAL_ERROR`). */
+        InternalError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Layanan eksternal gagal (`EXTERNAL_SERVICE_ERROR`). */
+        ExternalServiceError: {
             headers: {
                 [name: string]: unknown;
             };
