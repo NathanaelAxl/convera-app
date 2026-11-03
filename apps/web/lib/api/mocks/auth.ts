@@ -18,6 +18,7 @@ import type {
   ResetPasswordResult,
   User,
 } from "../types"
+import { mockRequireCsrf } from "./csrf"
 import { DEFAULT_MOCK_USER_ID, getMockSessionUserId, setMockSessionUserId } from "./session"
 import { createRateLimiter, mockDelay, mockError, mockValidate } from "./utils"
 
@@ -115,6 +116,7 @@ const forgotPasswordLimiter = createRateLimiter(3, 60 * 60_000)
 
 export async function register(body: RegisterRequest): Promise<User> {
   await mockDelay()
+  mockRequireCsrf()
   const input = mockValidate(registerRequestSchema, body)
   if (findByEmail(input.email)) {
     mockError(409, "CONFLICT", "Email sudah terdaftar.", [
@@ -140,6 +142,7 @@ export async function register(body: RegisterRequest): Promise<User> {
 
 export async function login(body: LoginRequest): Promise<LoggedInUser> {
   await mockDelay()
+  mockRequireCsrf()
   const input = mockValidate(loginRequestSchema, body)
   const key = input.email.toLowerCase()
   if (loginLimiter.isLimited(key)) {
@@ -162,12 +165,14 @@ export async function login(body: LoginRequest): Promise<LoggedInUser> {
 
 export async function logout(): Promise<void> {
   await mockDelay()
+  mockRequireCsrf()
   currentUserOr401()
   setMockSessionUserId(null)
 }
 
 export async function forgotPassword(body: ForgotPasswordRequest): Promise<MessageResult> {
   await mockDelay()
+  mockRequireCsrf()
   const input = mockValidate(forgotPasswordRequestSchema, body)
   const key = input.email.toLowerCase()
   if (forgotPasswordLimiter.isLimited(key)) {
@@ -190,6 +195,7 @@ export async function forgotPassword(body: ForgotPasswordRequest): Promise<Messa
 
 export async function resetPassword(body: ResetPasswordRequest): Promise<ResetPasswordResult> {
   await mockDelay()
+  mockRequireCsrf()
   const input = mockValidate(resetPasswordRequestSchema, body)
   const tokens = readResetTokens()
   const entry = tokens[input.token]
@@ -211,6 +217,7 @@ export async function getMe(): Promise<User> {
 
 export async function changePassword(body: ChangePasswordRequest): Promise<void> {
   await mockDelay()
+  mockRequireCsrf()
   const record = currentUserOr401()
   const input = mockValidate(changePasswordRequestSchema, body)
   if (input.current_password !== record.password) {

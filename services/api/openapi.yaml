@@ -11,7 +11,9 @@ info:
     - Respons sukses dibungkus `{ "data": ... }`; daftar berpaginasi menambah `meta`.
     - Respons error memakai `{ "error": { "code", "message", "details" } }`.
     - Autentikasi lewat cookie httpOnly `access_token` (JWT 15 menit) dan `refresh_token` (30 hari).
-    - Request mutasi (POST/PUT/PATCH/DELETE) wajib mengirim header `X-CSRF-Token` yang sama dengan cookie `csrf_token`.
+    - Request mutasi (POST/PUT/PATCH/DELETE) wajib mengirim header `X-CSRF-Token` yang sama dengan cookie `csrf_token`,
+      termasuk endpoint publik (login, register, lupa/reset password). Cookie `csrf_token` (bukan httpOnly) dipasang oleh
+      `GET /auth/csrf`; klien memanggilnya otomatis bila cookie belum ada.
     - `{slug}` adalah `projects.slug`; proyek yang tidak ada atau bukan milik user dijawab 404.
 
     Endpoint fitur ditambahkan per fitur.
@@ -31,11 +33,37 @@ tags:
     description: Proyek (PRD 7.4)
 
 paths:
+  /auth/csrf:
+    get:
+      tags: [auth]
+      operationId: getCsrfToken
+      summary: Pasang cookie csrf_token untuk double-submit CSRF
+      description: |
+        Publik. Memasang cookie `csrf_token` (acak, bukan httpOnly agar bisa dibaca JavaScript, `SameSite=Lax`,
+        `Secure` di produksi, `Path=/`). Klien memanggil endpoint ini sebelum request mutasi pertama bila cookie
+        `csrf_token` belum ada, lalu mengirim nilainya di header `X-CSRF-Token`.
+        Bila cookie sudah ada, server boleh memakai ulang nilainya.
+      security: []
+      responses:
+        "204":
+          description: Cookie `csrf_token` dipasang lewat header `Set-Cookie`.
+          headers:
+            Set-Cookie:
+              description: "`csrf_token=<nilai acak>; Path=/; SameSite=Lax; Secure`"
+              schema:
+                type: string
+
   /auth/register:
     post:
       tags: [auth]
       operationId: register
       summary: Daftar akun baru dan langsung masuk
+      description: |
+        Catatan backend:
+        - Password di-hash dengan argon2id, bukan bcrypt. bcrypt memotong input di 72 byte, padahal password boleh
+          sampai 128 karakter (lihat skema `Password`).
+        - Wajib diberi rate limit per IP, karena respons 409 memberi tahu apakah sebuah email sudah terdaftar
+          (enumerasi akun). Angkanya belum ada di NFR-12; usulan awal 10 permintaan per jam per IP.
       security:
         - csrfToken: []
       requestBody:
@@ -62,12 +90,17 @@ paths:
           $ref: "#/components/responses/ValidationError"
         "429":
           $ref: "#/components/responses/TooManyRequests"
+          description: Rate limit per IP untuk mencegah enumerasi email lewat respons 409.
 
   /auth/login:
     post:
       tags: [auth]
       operationId: login
       summary: Masuk dengan email dan password
+      description: |
+        Catatan backend: verifikasi password dengan argon2id (lihat `POST /auth/register`). Untuk email yang tidak
+        terdaftar, tetap jalankan verifikasi argon2id terhadap hash tiruan agar waktu respons tidak membocorkan
+        apakah email terdaftar.
       security:
         - csrfToken: []
       requestBody:
@@ -167,6 +200,7 @@ paths:
       tags: [auth]
       operationId: resetPassword
       summary: Ganti password memakai token dari tautan reset
+      description: "Catatan backend: password baru di-hash dengan argon2id, bukan bcrypt (bcrypt memotong input di 72 byte)."
       security:
         - csrfToken: []
       requestBody:
@@ -216,6 +250,7 @@ paths:
       tags: [account]
       operationId: changePassword
       summary: Ganti password; sesi lain dicabut, sesi saat ini tetap aktif
+      description: "Catatan backend: password baru di-hash dengan argon2id, bukan bcrypt (bcrypt memotong input di 72 byte)."
       security:
         - cookieAuth: []
           csrfToken: []
@@ -271,7 +306,9 @@ components:
       type: apiKey
       in: header
       name: X-CSRF-Token
-      description: Wajib untuk POST/PUT/PATCH/DELETE; nilainya sama dengan cookie `csrf_token` (double-submit).
+      description: |
+        Wajib untuk POST/PUT/PATCH/DELETE, termasuk endpoint publik; nilainya sama dengan cookie `csrf_token`
+        (double-submit, cookie dipasang `GET /auth/csrf`). Header tidak ada atau tidak cocok → 403 `FORBIDDEN`.
 
   parameters:
     ProjectSlug:
@@ -569,7 +606,9 @@ components:
       type: string
       minLength: 8
       maxLength: 128
-      description: Minimal 8 karakter [asumsi FR-01], maksimal 128.
+      description: |
+        Minimal 8 karakter [asumsi FR-01], maksimal 128. Disimpan sebagai hash argon2id (NFR-07), bukan bcrypt,
+        karena bcrypt memotong input di 72 byte.
 
     RegisterRequest:
       type: object

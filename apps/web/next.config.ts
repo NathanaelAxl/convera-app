@@ -6,6 +6,12 @@ const apiUrl = (process.env.API_URL ?? "http://localhost:8080").replace(/\/+$/, 
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
+  experimental: {
+    // Halaman di bawah (app) baru dirender setelah sesi (`GET /me`) dicek di browser, jadi validasi
+    // instant navigation otomatis selalu gagal ("dropped segment"). Validasi hanya untuk segmen yang
+    // mengekspor `instant` secara eksplisit.
+    instantInsights: { validationLevel: "manual-warning" },
+  },
   turbopack: {
     rules: {
       "*.css": {

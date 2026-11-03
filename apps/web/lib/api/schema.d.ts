@@ -4,6 +4,29 @@
  */
 
 export interface paths {
+    "/auth/csrf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Pasang cookie csrf_token untuk double-submit CSRF
+         * @description Publik. Memasang cookie `csrf_token` (acak, bukan httpOnly agar bisa dibaca JavaScript, `SameSite=Lax`,
+         *     `Secure` di produksi, `Path=/`). Klien memanggil endpoint ini sebelum request mutasi pertama bila cookie
+         *     `csrf_token` belum ada, lalu mengirim nilainya di header `X-CSRF-Token`.
+         *     Bila cookie sudah ada, server boleh memakai ulang nilainya.
+         */
+        get: operations["getCsrfToken"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/register": {
         parameters: {
             query?: never;
@@ -13,7 +36,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Daftar akun baru dan langsung masuk */
+        /**
+         * Daftar akun baru dan langsung masuk
+         * @description Catatan backend:
+         *     - Password di-hash dengan argon2id, bukan bcrypt. bcrypt memotong input di 72 byte, padahal password boleh
+         *       sampai 128 karakter (lihat skema `Password`).
+         *     - Wajib diberi rate limit per IP, karena respons 409 memberi tahu apakah sebuah email sudah terdaftar
+         *       (enumerasi akun). Angkanya belum ada di NFR-12; usulan awal 10 permintaan per jam per IP.
+         */
         post: operations["register"];
         delete?: never;
         options?: never;
@@ -30,7 +60,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Masuk dengan email dan password */
+        /**
+         * Masuk dengan email dan password
+         * @description Catatan backend: verifikasi password dengan argon2id (lihat `POST /auth/register`). Untuk email yang tidak
+         *     terdaftar, tetap jalankan verifikasi argon2id terhadap hash tiruan agar waktu respons tidak membocorkan
+         *     apakah email terdaftar.
+         */
         post: operations["login"];
         delete?: never;
         options?: never;
@@ -98,7 +133,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ganti password memakai token dari tautan reset */
+        /**
+         * Ganti password memakai token dari tautan reset
+         * @description Catatan backend: password baru di-hash dengan argon2id, bukan bcrypt (bcrypt memotong input di 72 byte).
+         */
         post: operations["resetPassword"];
         delete?: never;
         options?: never;
@@ -131,7 +169,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Ganti password; sesi lain dicabut, sesi saat ini tetap aktif */
+        /**
+         * Ganti password; sesi lain dicabut, sesi saat ini tetap aktif
+         * @description Catatan backend: password baru di-hash dengan argon2id, bukan bcrypt (bcrypt memotong input di 72 byte).
+         */
         put: operations["changePassword"];
         post?: never;
         delete?: never;
@@ -254,7 +295,10 @@ export interface components {
              */
             last_login_at: string;
         };
-        /** @description Minimal 8 karakter [asumsi FR-01], maksimal 128. */
+        /**
+         * @description Minimal 8 karakter [asumsi FR-01], maksimal 128. Disimpan sebagai hash argon2id (NFR-07), bukan bcrypt,
+         *     karena bcrypt memotong input di 72 byte.
+         */
         Password: string;
         RegisterRequest: {
             /** @example Rina Saputri */
@@ -473,6 +517,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getCsrfToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cookie `csrf_token` dipasang lewat header `Set-Cookie`. */
+            204: {
+                headers: {
+                    /** @description `csrf_token=<nilai acak>; Path=/; SameSite=Lax; Secure` */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     register: {
         parameters: {
             query?: never;
@@ -500,6 +564,7 @@ export interface operations {
             /** @description Email sudah terdaftar (`CONFLICT`, `details` berisi field `email`). */
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
+            /** @description Rate limit per IP untuk mencegah enumerasi email lewat respons 409. */
             429: components["responses"]["TooManyRequests"];
         };
     };
