@@ -4,8 +4,8 @@ import { usePathname, useRouter } from "next/navigation"
 import { useEffect, type ReactNode } from "react"
 
 import { useMe } from "@/lib/api/auth"
-import { isUnauthorized } from "@/lib/api/errors"
-import { useCurrentProject, useProjects } from "@/lib/api/projects"
+import { isApiError, isUnauthorized } from "@/lib/api/errors"
+import { useCurrentProject } from "@/lib/api/projects"
 
 import { ErrorState } from "./error-state"
 import { LoadError } from "./load-error"
@@ -45,13 +45,12 @@ export function AdminGuard({ children }: { children: ReactNode }) {
   return children
 }
 
-/** Route `/projects/[slug]/*`: slug yang tidak ada atau milik user lain berakhir di 404. */
+/** Route `/projects/[slug]/*`: `GET /projects/{slug}` menjawab 404 untuk slug yang tidak ada atau milik user lain. */
 export function ProjectGuard({ children }: { children: ReactNode }) {
-  const { project, isPending, error } = useCurrentProject()
-  const projects = useProjects()
+  const { project, isPending, error, refetch } = useCurrentProject()
 
-  if (isPending) return <PageSkeleton />
-  if (error) return <LoadError error={error} onRetry={() => projects.refetch()} />
-  if (!project) return <ErrorState code={404} />
+  if (isApiError(error) && error.status === 404) return <ErrorState code={404} />
+  if (error) return <LoadError error={error} onRetry={() => refetch()} />
+  if (isPending || !project) return <PageSkeleton />
   return children
 }

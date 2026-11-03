@@ -2,8 +2,8 @@
 
 import { ChevronsUpDownIcon, PlusIcon } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
+import { useRef, useState } from "react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -18,6 +18,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import type { Project } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
+
+import { CreateProjectDialog } from "./projects/create-project-dialog"
 
 function StatusDot({ active }: { active: boolean }) {
   return (
@@ -38,6 +40,10 @@ type ProjectSwitcherProps = {
 export function ProjectSwitcher({ projects, activeSlug, onNavigate }: ProjectSwitcherProps) {
   const router = useRouter()
   const pathname = usePathname()
+  const [createOpen, setCreateOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  // Menu yang ditutup mengembalikan fokus ke tombolnya; saat membuka dialog, fokus harus tetap di dialog.
+  const openingDialog = useRef(false)
 
   if (!projects) return <Skeleton className="h-9 w-full touch:h-11" />
 
@@ -51,44 +57,61 @@ export function ProjectSwitcher({ projects, activeSlug, onNavigate }: ProjectSwi
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="lg" className="w-full justify-between">
-          <span className="flex min-w-0 items-center gap-2">
-            {active && <StatusDot active={active.is_active} />}
-            <span className="sr-only">Proyek: </span>
-            <span className="truncate">{active?.name ?? (projects.length ? "Pilih proyek" : "Belum ada proyek")}</span>
-          </span>
-          <ChevronsUpDownIcon className="text-muted-foreground" aria-hidden="true" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-(--radix-dropdown-menu-trigger-width) min-w-56">
-        <DropdownMenuLabel>Proyek</DropdownMenuLabel>
-        <DropdownMenuRadioGroup
-          value={activeSlug}
-          onValueChange={(slug) => {
-            router.push(hrefFor(slug))
-            onNavigate?.()
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button ref={triggerRef} variant="outline" size="lg" className="w-full justify-between">
+            <span className="flex min-w-0 items-center gap-2">
+              {active && <StatusDot active={active.is_active} />}
+              <span className="sr-only">Proyek: </span>
+              <span className="truncate">{active?.name ?? (projects.length ? "Pilih proyek" : "Belum ada proyek")}</span>
+            </span>
+            <ChevronsUpDownIcon className="text-muted-foreground" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="w-(--radix-dropdown-menu-trigger-width) min-w-56"
+          onCloseAutoFocus={(event) => {
+            if (!openingDialog.current) return
+            openingDialog.current = false
+            event.preventDefault()
           }}
         >
-          {projects.map((project) => (
-            <DropdownMenuRadioItem key={project.id} value={project.slug}>
-              <StatusDot active={project.is_active} />
-              <span className="truncate">{project.name}</span>
-              <span className="sr-only">, {project.is_active ? "aktif" : "nonaktif"}</span>
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-        <DropdownMenuSeparator />
-        {/* CreateProjectDialog dibangun di fitur Fase 1 — Manajemen Proyek. */}
-        <DropdownMenuItem disabled>
-          <PlusIcon aria-hidden="true" />
-          Proyek baru
-          <Badge variant="secondary" className="ml-auto">
-            Segera
-          </Badge>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <DropdownMenuLabel>Proyek</DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={activeSlug}
+            onValueChange={(slug) => {
+              router.push(hrefFor(slug))
+              onNavigate?.()
+            }}
+          >
+            {projects.map((project) => (
+              <DropdownMenuRadioItem key={project.id} value={project.slug}>
+                <StatusDot active={project.is_active} />
+                <span className="truncate">{project.name}</span>
+                <span className="sr-only">, {project.is_active ? "aktif" : "nonaktif"}</span>
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              openingDialog.current = true
+              setCreateOpen(true)
+            }}
+          >
+            <PlusIcon aria-hidden="true" />
+            Proyek baru
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <CreateProjectDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        returnFocusRef={triggerRef}
+        onCreated={() => onNavigate?.()}
+      />
+    </>
   )
 }

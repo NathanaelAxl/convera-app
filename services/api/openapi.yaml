@@ -290,6 +290,7 @@ paths:
       tags: [projects]
       operationId: listProjects
       summary: Daftar proyek milik user
+      description: Semua proyek milik user yang sedang login, tanpa paginasi, urut `created_at` terbaru dulu.
       responses:
         "200":
           description: OK
@@ -305,6 +306,150 @@ paths:
                       $ref: "#/components/schemas/Project"
         "401":
           $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [projects]
+      operationId: createProject
+      summary: Buat proyek baru cukup dengan nama
+      description: |
+        Saat dibuat, server menyiapkan:
+        - `slug` dari nama (FR-07, FR-08). Aturan (frontend memakai aturan yang sama untuk pratinjau, `lib/projects.ts`):
+          1. Normalisasi Unicode NFKD lalu buang tanda diakritik (kategori Unicode `M`), misalnya `é` → `e`.
+          2. Huruf kecil.
+          3. Setiap deret karakter selain `a-z` dan `0-9` menjadi satu `-`.
+          4. `-` di awal dan akhir dibuang.
+          5. Dipotong maksimal 100 karakter, lalu `-` di akhir dibuang lagi.
+          6. Bila hasilnya kosong (nama tanpa huruf/angka Latin), slug dasar = `proyek`.
+          7. Slug unik secara global (termasuk proyek milik user lain); bila sudah dipakai, tambahkan `-2`, `-3`, dan
+             seterusnya [asumsi FR-08]. Slug tidak pernah berubah setelah proyek dibuat.
+        - `webhook_key` acak 32 karakter `[A-Za-z0-9]` dari CSPRNG (unik).
+        - Slot event default (Event Mapping AC 4 [asumsi]): Contact aktif, Lead, InitiateCheckout, dan Purchase tidak aktif.
+        - Nilai default kolom lain sesuai PRD 6.3 (`business_category` = `general`, `wa_connection_type` = `waba`,
+          `wa_provider` = `generic`, trial 7 hari).
+
+        Catatan backend: `name` di-trim sebelum divalidasi dan disimpan. Rate limit untuk 429 belum ada di NFR-12;
+        usulan awal 30 proyek per jam per user.
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Proyek dibuat. `slug` di respons adalah slug final (bisa bersufiks `-2`, `-3`, ...).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+          description: Nama kosong atau lebih dari 100 karakter (`details` berisi field `name`).
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+
+  /projects/{slug}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectSlug"
+    get:
+      tags: [projects]
+      operationId: getProject
+      summary: Detail proyek milik user
+      description: Proyek yang tidak ada atau milik user lain dijawab 404, bukan 403 (FR-13).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ProjectDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [projects]
+      operationId: deleteProject
+      summary: Hapus proyek permanen beserta seluruh datanya
+      description: |
+        User wajib mengetik ulang nama proyek (Manajemen Proyek AC 6 [asumsi]). `confirm_name` dibandingkan dengan
+        `projects.name` setelah keduanya di-trim, peka huruf besar/kecil. Semua data turunan ikut terhapus lewat
+        `ON DELETE CASCADE` (kontak, event, slot, blacklist, sesi landing page, insight iklan, dst.).
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteProjectRequest"
+      responses:
+        "204":
+          description: Proyek dan semua data turunannya dihapus.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+          description: Nama konfirmasi kosong atau tidak cocok (`details` berisi field `confirm_name`).
+
+  /projects/{slug}/status:
+    parameters:
+      - $ref: "#/components/parameters/ProjectSlug"
+    patch:
+      tags: [projects]
+      operationId: updateProjectStatus
+      summary: Nonaktifkan atau aktifkan kembali proyek
+      description: |
+        Proyek nonaktif tetap bisa dibuka dan diatur, tetapi webhook dijawab 200 tanpa diproses (FR-11, UF-02 langkah 5).
+        Mengirim nilai yang sama dengan status sekarang tetap 200 (idempoten).
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectStatusRequest"
+      responses:
+        "200":
+          description: Status diperbarui.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ProjectStatusResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+          description: "`is_active` tidak ada atau bukan boolean (`details` berisi field `is_active`)."
 
 components:
   securitySchemes:
@@ -781,3 +926,76 @@ components:
           type: string
           format: date-time
           example: "2026-11-02T03:16:00Z"
+
+    ProjectDetail:
+      description: Respons `GET /projects/{slug}`, objek `Project` ditambah status setup.
+      allOf:
+        - $ref: "#/components/schemas/Project"
+        - type: object
+          required: [is_locked, has_capi_access_token, pixel_id, setup_complete]
+          properties:
+            is_locked:
+              type: boolean
+              description: Trial atau langganan habis (Fase 3).
+              example: false
+            has_capi_access_token:
+              type: boolean
+              example: true
+            pixel_id:
+              type: ["string", "null"]
+              pattern: "^[0-9]+$"
+              maxLength: 20
+              example: "123456789012345"
+            setup_complete:
+              type: boolean
+              description: Pixel ID dan Access Token terisi, dan sudah ada pesan masuk serta event sukses.
+              example: false
+
+    ProjectName:
+      type: string
+      minLength: 1
+      maxLength: 100
+      description: Di-trim dulu; kosong atau lebih dari 100 karakter ditolak.
+      example: Toko Dummy & Co. 2026!
+
+    CreateProjectRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          $ref: "#/components/schemas/ProjectName"
+
+    UpdateProjectStatusRequest:
+      type: object
+      required: [is_active]
+      properties:
+        is_active:
+          type: boolean
+          example: false
+
+    ProjectStatusResult:
+      type: object
+      required: [slug, is_active, updated_at]
+      properties:
+        slug:
+          type: string
+          maxLength: 120
+          example: toko-dummy-co-2026
+        is_active:
+          type: boolean
+          example: false
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-11-02T04:00:00Z"
+
+    DeleteProjectRequest:
+      type: object
+      required: [confirm_name]
+      properties:
+        confirm_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Harus sama dengan nama proyek (keduanya di-trim, peka huruf besar/kecil).
+          example: Toko Dummy & Co. 2026!

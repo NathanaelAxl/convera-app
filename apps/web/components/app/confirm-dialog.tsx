@@ -29,6 +29,11 @@ type ConfirmDialogProps = {
   confirmDisabled?: boolean
   /** Konten tambahan di antara deskripsi dan tombol. */
   children?: ReactNode
+  /**
+   * Dialog yang dibuka dari `DropdownMenu` tidak punya trigger, jadi fokus hilang ke `<body>` saat ditutup.
+   * Panggil `event.preventDefault()` lalu fokuskan elemen tujuan (NFR-17).
+   */
+  onCloseAutoFocus?: (event: Event) => void
 }
 
 export function ConfirmDialog({
@@ -43,6 +48,7 @@ export function ConfirmDialog({
   pending: pendingProp = false,
   confirmDisabled = false,
   children,
+  onCloseAutoFocus,
 }: ConfirmDialogProps) {
   const [running, setRunning] = useState(false)
   const pending = pendingProp || running
@@ -60,26 +66,39 @@ export function ConfirmDialog({
     }
   }
 
+  const footer = (
+    <AlertDialogFooter>
+      <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
+      <AlertDialogAction
+        type={children ? "submit" : "button"}
+        variant={variant}
+        disabled={pending || confirmDisabled}
+        aria-busy={pending || undefined}
+        onClick={handleConfirm}
+      >
+        {pending && <Loader2Icon className="animate-spin" aria-hidden="true" />}
+        {confirmLabel}
+      </AlertDialogAction>
+    </AlertDialogFooter>
+  )
+
   return (
     <AlertDialog open={open} onOpenChange={(next) => !pending && onOpenChange(next)}>
-      <AlertDialogContent>
+      <AlertDialogContent onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           {description && <AlertDialogDescription>{description}</AlertDialogDescription>}
         </AlertDialogHeader>
-        {children}
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>{cancelLabel}</AlertDialogCancel>
-          <AlertDialogAction
-            variant={variant}
-            disabled={pending || confirmDisabled}
-            aria-busy={pending || undefined}
-            onClick={handleConfirm}
-          >
-            {pending && <Loader2Icon className="animate-spin" aria-hidden="true" />}
-            {confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
+        {children ? (
+          // Enter di field dalam dialog menekan tombol konfirmasi lewat submit implisit form;
+          // tombol yang nonaktif (`confirmDisabled`) otomatis mencegahnya.
+          <form className="contents" noValidate onSubmit={(event) => event.preventDefault()}>
+            {children}
+            {footer}
+          </form>
+        ) : (
+          footer
+        )}
       </AlertDialogContent>
     </AlertDialog>
   )

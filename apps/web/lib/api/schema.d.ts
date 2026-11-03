@@ -189,14 +189,90 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Daftar proyek milik user */
+        /**
+         * Daftar proyek milik user
+         * @description Semua proyek milik user yang sedang login, tanpa paginasi, urut `created_at` terbaru dulu.
+         */
         get: operations["listProjects"];
+        put?: never;
+        /**
+         * Buat proyek baru cukup dengan nama
+         * @description Saat dibuat, server menyiapkan:
+         *     - `slug` dari nama (FR-07, FR-08). Aturan (frontend memakai aturan yang sama untuk pratinjau, `lib/projects.ts`):
+         *       1. Normalisasi Unicode NFKD lalu buang tanda diakritik (kategori Unicode `M`), misalnya `é` → `e`.
+         *       2. Huruf kecil.
+         *       3. Setiap deret karakter selain `a-z` dan `0-9` menjadi satu `-`.
+         *       4. `-` di awal dan akhir dibuang.
+         *       5. Dipotong maksimal 100 karakter, lalu `-` di akhir dibuang lagi.
+         *       6. Bila hasilnya kosong (nama tanpa huruf/angka Latin), slug dasar = `proyek`.
+         *       7. Slug unik secara global (termasuk proyek milik user lain); bila sudah dipakai, tambahkan `-2`, `-3`, dan
+         *          seterusnya [asumsi FR-08]. Slug tidak pernah berubah setelah proyek dibuat.
+         *     - `webhook_key` acak 32 karakter `[A-Za-z0-9]` dari CSPRNG (unik).
+         *     - Slot event default (Event Mapping AC 4 [asumsi]): Contact aktif, Lead, InitiateCheckout, dan Purchase tidak aktif.
+         *     - Nilai default kolom lain sesuai PRD 6.3 (`business_category` = `general`, `wa_connection_type` = `waba`,
+         *       `wa_provider` = `generic`, trial 7 hari).
+         *
+         *     Catatan backend: `name` di-trim sebelum divalidasi dan disimpan. Rate limit untuk 429 belum ada di NFR-12;
+         *     usulan awal 30 proyek per jam per user.
+         */
+        post: operations["createProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Detail proyek milik user
+         * @description Proyek yang tidak ada atau milik user lain dijawab 404, bukan 403 (FR-13).
+         */
+        get: operations["getProject"];
+        put?: never;
+        post?: never;
+        /**
+         * Hapus proyek permanen beserta seluruh datanya
+         * @description User wajib mengetik ulang nama proyek (Manajemen Proyek AC 6 [asumsi]). `confirm_name` dibandingkan dengan
+         *     `projects.name` setelah keduanya di-trim, peka huruf besar/kecil. Semua data turunan ikut terhapus lewat
+         *     `ON DELETE CASCADE` (kontak, event, slot, blacklist, sesi landing page, insight iklan, dst.).
+         */
+        delete: operations["deleteProject"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{slug}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Nonaktifkan atau aktifkan kembali proyek
+         * @description Proyek nonaktif tetap bisa dibuka dan diatur, tetapi webhook dijawab 200 tanpa diproses (FR-11, UF-02 langkah 5).
+         *     Mengirim nilai yang sama dengan status sekarang tetap 200 (idempoten).
+         */
+        patch: operations["updateProjectStatus"];
         trace?: never;
     };
 }
@@ -389,6 +465,53 @@ export interface components {
              * @example 2026-11-02T03:16:00Z
              */
             created_at: string;
+        };
+        /** @description Respons `GET /projects/{slug}`, objek `Project` ditambah status setup. */
+        ProjectDetail: components["schemas"]["Project"] & {
+            /**
+             * @description Trial atau langganan habis (Fase 3).
+             * @example false
+             */
+            is_locked: boolean;
+            /** @example true */
+            has_capi_access_token: boolean;
+            /** @example 123456789012345 */
+            pixel_id: string | null;
+            /**
+             * @description Pixel ID dan Access Token terisi, dan sudah ada pesan masuk serta event sukses.
+             * @example false
+             */
+            setup_complete: boolean;
+        };
+        /**
+         * @description Di-trim dulu; kosong atau lebih dari 100 karakter ditolak.
+         * @example Toko Dummy & Co. 2026!
+         */
+        ProjectName: string;
+        CreateProjectRequest: {
+            name: components["schemas"]["ProjectName"];
+        };
+        UpdateProjectStatusRequest: {
+            /** @example false */
+            is_active: boolean;
+        };
+        ProjectStatusResult: {
+            /** @example toko-dummy-co-2026 */
+            slug: string;
+            /** @example false */
+            is_active: boolean;
+            /**
+             * Format: date-time
+             * @example 2026-11-02T04:00:00Z
+             */
+            updated_at: string;
+        };
+        DeleteProjectRequest: {
+            /**
+             * @description Harus sama dengan nama proyek (keduanya di-trim, peka huruf besar/kecil).
+             * @example Toko Dummy & Co. 2026!
+             */
+            confirm_name: string;
         };
     };
     responses: {
@@ -786,6 +909,128 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    createProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Proyek dibuat. `slug` di respons adalah slug final (bisa bersufiks `-2`, `-3`, ...). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Project"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["CsrfInvalid"];
+            /** @description Nama kosong atau lebih dari 100 karakter (`details` berisi field `name`). */
+            422: components["responses"]["ValidationError"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProjectDetail"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    deleteProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Proyek dan semua data turunannya dihapus. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            /** @description Nama konfirmasi kosong atau tidak cocok (`details` berisi field `confirm_name`). */
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    updateProjectStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Status diperbarui. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProjectStatusResult"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            /** @description `is_active` tidak ada atau bukan boolean (`details` berisi field `is_active`). */
+            422: components["responses"]["ValidationError"];
         };
     };
 }
