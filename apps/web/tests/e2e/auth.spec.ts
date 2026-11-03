@@ -1,4 +1,15 @@
-import { BASE_URL, csrfCookie, expect, gotoReady, RINA, signIn, SIGNED_OUT, signOut, test } from "./fixtures"
+import {
+  BASE_URL,
+  countCompletedSubmits,
+  csrfCookie,
+  expect,
+  gotoReady,
+  RINA,
+  signIn,
+  SIGNED_OUT,
+  signOut,
+  test,
+} from "./fixtures"
 
 // Fase 1 — Autentikasi & Akun, dengan modul `auth` di-mock (lib/api/config.ts).
 
@@ -55,13 +66,14 @@ test.describe("masuk", () => {
     await gotoReady(page, "/login")
     const submit = page.getByRole("button", { name: "Masuk", exact: true })
     await page.getByLabel("Email", { exact: true }).fill("admin@contoh.id")
+    await countCompletedSubmits(submit)
 
     for (let attempt = 1; attempt <= 6; attempt++) {
       await page.getByLabel("Password", { exact: true }).fill(`salah-${attempt}`)
       await submit.click()
-      // Tunggu respons percobaan ini sebelum percobaan berikutnya.
-      await expect(submit).toBeDisabled()
-      await expect(submit).toBeEnabled()
+      // Tunggu respons percobaan ini sebelum percobaan berikutnya. Jangan menunggu `toBeDisabled()`:
+      // keadaan nonaktif hanya ±300 ms dan bisa terlewat oleh polling saat uji berjalan paralel.
+      await expect(submit).toHaveAttribute("data-e2e-completed", String(attempt))
     }
     await expect(page.getByText("Terlalu banyak percobaan masuk. Coba lagi dalam 15 menit.")).toBeVisible()
   })
@@ -120,8 +132,9 @@ test.describe("daftar", () => {
 
     await email.fill("dewi@contoh.id")
     await submit.click()
-    await expect(page).toHaveURL(/\/projects$/)
+    // Toast (4 detik) dibuat sebelum pindah halaman, jadi dicek dulu; navigasi bisa lebih lama dari umurnya.
     await expect(page.getByText("Akun berhasil dibuat. Selamat datang di Convera!")).toBeVisible()
+    await expect(page).toHaveURL(/\/projects$/)
     await expect(page.getByText("Dewi Lestari").first()).toBeVisible()
   })
 })
@@ -176,8 +189,9 @@ test.describe("lupa & reset password", () => {
     }
 
     await resetTo("rahasia-rina-3")
-    await expect(page).toHaveURL(/\/login$/)
+    // Toast (4 detik) dibuat sebelum pindah halaman, jadi dicek dulu; navigasi bisa lebih lama dari umurnya.
     await expect(page.getByText(/Password berhasil diganti/)).toBeVisible()
+    await expect(page).toHaveURL(/\/login$/)
     await signIn(page, RINA.email, "rahasia-rina-3")
     await expect(page).toHaveURL(/\/projects$/)
 

@@ -70,7 +70,7 @@ test.describe("UF-01: dari registrasi sampai proyek pertama", () => {
 
     // Langkah 5 + AC 3, AC 4: slug sudah dipakai (proyek contoh milik Rina) → -2; diarahkan ke Pengaturan.
     await submit.click()
-    // Toast dicek dulu: tampil 4 detik, bisa lebih singkat dari kompilasi halaman pertama di dev server.
+    // Toast (4 detik) dibuat sebelum pindah halaman, jadi dicek dulu; navigasi bisa lebih lama dari umurnya.
     await expect(page.getByText(`Proyek “${TOKO.name}” dibuat dengan slug ${TOKO.slug}-2.`)).toBeVisible()
     await expect(page).toHaveURL(new RegExp(`/projects/${TOKO.slug}-2/settings$`))
     await expect(page.getByRole("heading", { name: "Pengaturan Proyek" })).toBeVisible()

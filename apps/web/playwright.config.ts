@@ -17,7 +17,11 @@ export default defineConfig({
     timezoneId: "Asia/Jakarta",
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    // Mengompilasi semua halaman dev server sekali sebelum uji paralel (lihat warmup.setup.ts).
+    { name: "warmup", testMatch: /warmup\.setup\.ts$/, use: { ...devices["Desktop Chrome"] } },
+    { name: "chromium", use: { ...devices["Desktop Chrome"] }, dependencies: ["warmup"] },
+  ],
   webServer: {
     command: "npm run dev",
     url: `${BASE_URL}/login`,

@@ -1,4 +1,4 @@
-import { test as base, expect, type Page } from "@playwright/test"
+import { test as base, expect, type Locator, type Page } from "@playwright/test"
 
 export const BASE_URL = "http://localhost:3000"
 
@@ -50,6 +50,25 @@ export async function signIn(page: Page, email: string, password: string) {
 export async function signOut(page: Page) {
   await page.getByRole("button", { name: "Keluar" }).dispatchEvent("click")
   await expect(page).toHaveURL(/\/login$/)
+}
+
+/**
+ * Mencatat di atribut `data-e2e-completed` tombol submit berapa request yang sudah selesai, yaitu setiap kali
+ * atribut `disabled` dilepas lagi. Tombol hanya nonaktif selama request berjalan (jeda mock ±300 ms), sehingga
+ * `toBeDisabled()` setelah klik bisa melewatkannya bila polling Playwright terlambat (banyak worker + trace).
+ * MutationObserver menerima setiap perubahan atribut, jadi tidak ada request yang terlewat.
+ */
+export async function countCompletedSubmits(button: Locator) {
+  await button.evaluate((element) => {
+    element.setAttribute("data-e2e-completed", "0")
+    new MutationObserver((records) => {
+      // `oldValue` terisi berarti `disabled` sebelumnya ada dan sekarang dilepas: satu request selesai.
+      const completed = records.filter((record) => record.oldValue !== null).length
+      if (completed === 0) return
+      const total = Number(element.getAttribute("data-e2e-completed")) + completed
+      element.setAttribute("data-e2e-completed", String(total))
+    }).observe(element, { attributeFilter: ["disabled"], attributeOldValue: true })
+  })
 }
 
 export async function csrfCookie(page: Page) {
