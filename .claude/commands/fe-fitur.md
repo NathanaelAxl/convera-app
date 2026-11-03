@@ -14,5 +14,6 @@ Tugas:
 5. Validasi form dengan zod memakai aturan yang sama dengan server (panjang, format, wajib/opsional). Simulasikan juga respons error di mock agar pesan error per field bisa dicek.
 6. Tangani state loading, kosong (`EmptyState`), error, dan sukses (toast).
 7. Responsif mobile dan desktop, bisa dipakai dengan keyboard, label aksesibilitas sesuai yang disebut PRD.
+8. Tambahkan uji fitur ini ke repo, bukan hanya di scratchpad: Vitest untuk logika di `lib/` dan mock (`tests/lib`), Playwright untuk user flow (`tests/e2e`). Semua uji yang sudah ada harus tetap lolos (`npm test` dan `npm run test:e2e`).
 
-Jangan sentuh fitur lain. Di akhir, beri checklist acceptance criteria (mana yang terpenuhi dan mana yang baru bisa dicek setelah integrasi), daftar [asumsi] dan Pertanyaan Terbuka yang terkait, lalu tunggu konfirmasi.
+Jangan sentuh fitur lain. Di akhir, beri hasil uji, checklist acceptance criteria (mana yang terpenuhi dan mana yang baru bisa dicek setelah integrasi), daftar [asumsi] dan Pertanyaan Terbuka yang terkait, lalu tunggu konfirmasi.

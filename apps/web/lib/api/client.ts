@@ -2,9 +2,10 @@ import createClient from "openapi-fetch"
 
 import { isMocked } from "./config"
 import { CSRF_COOKIE, readCookie } from "./cookies"
-import { ApiError } from "./errors"
+import { ApiError, isApiError } from "./errors"
 import { issueCsrfToken as issueMockCsrfToken } from "./mocks/csrf"
 import type { paths } from "./schema"
+import type { ApiErrorBody } from "./types"
 
 /** Diteruskan ke API Go lewat `rewrites` di next.config.ts. */
 export const API_BASE_URL = "/api/v1"
@@ -22,36 +23,70 @@ async function withCsrf(request: Request) {
   return request
 }
 
+async function isCsrfInvalid(response: Response) {
+  if (response.status !== 403) return false
+  const body = (await response
+    .clone()
+    .json()
+    .catch(() => null)) as Partial<ApiErrorBody> | null
+  return body?.error?.code === "CSRF_INVALID"
+}
+
+/** Kirim request dengan header CSRF. Bila dijawab 403 `CSRF_INVALID`, ambil token baru sekali lalu ulangi. */
+async function fetchWithCsrf(request: Request) {
+  const retry = request.clone()
+  const response = await fetch(await withCsrf(request))
+  if (!(await isCsrfInvalid(response))) return response
+  if (!(await issueCsrfToken())) return response
+  return fetch(await withCsrf(retry))
+}
+
 const baseClient = createClient<paths>({
   baseUrl: API_BASE_URL,
   credentials: "same-origin",
-  fetch: async (request) => fetch(await withCsrf(request)),
+  fetch: fetchWithCsrf,
 })
 
-let issuingCsrf: Promise<unknown> | null = null
+let issuingCsrf: Promise<boolean> | null = null
+
+/** Satu `GET /auth/csrf` untuk semua request yang menunggu bersamaan. `true` bila cookie baru terpasang. */
+function issueCsrfToken() {
+  issuingCsrf ??= (
+    isMocked("auth")
+      ? issueMockCsrfToken().then(() => true)
+      : baseClient.GET("/auth/csrf").then(({ response }) => response.ok)
+  )
+    .catch(() => false)
+    .finally(() => {
+      issuingCsrf = null
+    })
+  return issuingCsrf
+}
 
 /**
- * Memastikan cookie `csrf_token` ada sebelum request mutasi. Bila belum, panggil `GET /auth/csrf` sekali
- * untuk semua request yang menunggu bersamaan. Mengembalikan nilai cookie, atau `undefined` bila gagal
- * (request tetap dikirim dan server menjawab 403).
+ * Memastikan cookie `csrf_token` ada sebelum request mutasi; bila belum, panggil `GET /auth/csrf`.
+ * Mengembalikan nilai cookie, atau `undefined` bila gagal (request tetap dikirim dan server menjawab 403).
  */
 export async function ensureCsrfToken() {
   const existing = readCookie(CSRF_COOKIE)
   if (existing) return existing
-
-  issuingCsrf ??= (isMocked("auth") ? issueMockCsrfToken() : baseClient.GET("/auth/csrf"))
-    .catch(() => undefined)
-    .finally(() => {
-      issuingCsrf = null
-    })
-  await issuingCsrf
+  await issueCsrfToken()
   return readCookie(CSRF_COOKIE)
 }
 
-/** Mutasi di mode mock melewati klien HTTP; bungkus dengan ini agar alur CSRF-nya sama dengan mode asli. */
+/**
+ * Mutasi di mode mock melewati klien HTTP; bungkus dengan ini agar alur CSRF-nya sama dengan mode asli:
+ * cookie dipasang bila belum ada, dan 403 `CSRF_INVALID` dari mock diulang sekali dengan token baru.
+ */
 export async function withMockCsrf<T>(call: () => Promise<T>): Promise<T> {
   await ensureCsrfToken()
-  return call()
+  try {
+    return await call()
+  } catch (error) {
+    if (!isApiError(error) || error.code !== "CSRF_INVALID") throw error
+    if (!(await issueCsrfToken())) throw error
+    return call()
+  }
 }
 
 let refreshing: Promise<boolean> | null = null
@@ -70,14 +105,14 @@ function refreshSession() {
 
 async function fetchWithRefresh(request: Request) {
   const retry = request.clone()
-  const response = await fetch(await withCsrf(request))
+  const response = await fetchWithCsrf(request)
   if (response.status !== 401) return response
 
   const path = new URL(request.url).pathname.slice(API_BASE_URL.length)
   if (NO_REFRESH_PATHS.includes(path)) return response
   if (!(await refreshSession())) return response
 
-  return fetch(await withCsrf(retry))
+  return fetchWithCsrf(retry)
 }
 
 /** Klien bertipe dari openapi.yaml. Pakai lewat `unwrap()` dari modul di lib/api, bukan dari halaman. */

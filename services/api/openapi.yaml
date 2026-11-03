@@ -13,7 +13,8 @@ info:
     - Autentikasi lewat cookie httpOnly `access_token` (JWT 15 menit) dan `refresh_token` (30 hari).
     - Request mutasi (POST/PUT/PATCH/DELETE) wajib mengirim header `X-CSRF-Token` yang sama dengan cookie `csrf_token`,
       termasuk endpoint publik (login, register, lupa/reset password). Cookie `csrf_token` (bukan httpOnly) dipasang oleh
-      `GET /auth/csrf`; klien memanggilnya otomatis bila cookie belum ada.
+      `GET /auth/csrf`; klien memanggilnya otomatis bila cookie belum ada. Token tidak ada atau tidak valid dijawab
+      403 `CSRF_INVALID`; klien lalu mengambil token baru lewat `GET /auth/csrf` sekali dan mengulang request.
     - `{slug}` adalah `projects.slug`; proyek yang tidak ada atau bukan milik user dijawab 404.
 
     Endpoint fitur ditambahkan per fitur.
@@ -42,7 +43,8 @@ paths:
         Publik. Memasang cookie `csrf_token` (acak, bukan httpOnly agar bisa dibaca JavaScript, `SameSite=Lax`,
         `Secure` di produksi, `Path=/`). Klien memanggil endpoint ini sebelum request mutasi pertama bila cookie
         `csrf_token` belum ada, lalu mengirim nilainya di header `X-CSRF-Token`.
-        Bila cookie sudah ada, server boleh memakai ulang nilainya.
+        Selalu memasang nilai baru, juga bila cookie sudah ada: klien memanggilnya lagi setelah menerima 403
+        `CSRF_INVALID`.
       security: []
       responses:
         "204":
@@ -83,6 +85,8 @@ paths:
                 properties:
                   data:
                     $ref: "#/components/schemas/User"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
         "409":
           $ref: "#/components/responses/Conflict"
           description: Email sudah terdaftar (`CONFLICT`, `details` berisi field `email`).
@@ -123,6 +127,8 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
           description: Email atau password salah. Pesannya umum agar tidak membocorkan email yang terdaftar.
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
         "422":
           $ref: "#/components/responses/ValidationError"
         "429":
@@ -150,6 +156,8 @@ paths:
                     $ref: "#/components/schemas/RefreshResult"
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
 
   /auth/logout:
     post:
@@ -164,6 +172,8 @@ paths:
           description: Sesi dicabut dan cookie dihapus.
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
 
   /auth/forgot-password:
     post:
@@ -189,6 +199,8 @@ paths:
                 properties:
                   data:
                     $ref: "#/components/schemas/MessageResult"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
         "422":
           $ref: "#/components/responses/ValidationError"
         "429":
@@ -223,6 +235,8 @@ paths:
         "400":
           $ref: "#/components/responses/BadRequest"
           description: Token tidak valid, kedaluwarsa, atau sudah dipakai (`BAD_REQUEST`).
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
         "422":
           $ref: "#/components/responses/ValidationError"
 
@@ -265,6 +279,8 @@ paths:
           description: Password diganti dan sesi lain dicabut.
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
         "422":
           $ref: "#/components/responses/ValidationError"
           description: Password lama salah (`details` berisi field `current_password`) atau password baru tidak memenuhi syarat.
@@ -308,7 +324,9 @@ components:
       name: X-CSRF-Token
       description: |
         Wajib untuk POST/PUT/PATCH/DELETE, termasuk endpoint publik; nilainya sama dengan cookie `csrf_token`
-        (double-submit, cookie dipasang `GET /auth/csrf`). Header tidak ada atau tidak cocok → 403 `FORBIDDEN`.
+        (double-submit, cookie dipasang `GET /auth/csrf`). Header tidak ada, tidak sama dengan cookie, atau token
+        tidak valid → 403 `CSRF_INVALID` (bukan `FORBIDDEN`, agar klien tahu cukup mengambil token baru lalu
+        mengulang request).
 
   parameters:
     ProjectSlug:
@@ -385,6 +403,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/ErrorResponse"
+    CsrfInvalid:
+      description: Header `X-CSRF-Token` tidak ada, tidak sama dengan cookie `csrf_token`, atau token tidak valid (`CSRF_INVALID`).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
     NotFound:
       description: Tidak ditemukan, termasuk proyek milik user lain (`NOT_FOUND`).
       content:
@@ -444,6 +468,7 @@ components:
         - `UNAUTHORIZED` (401): belum login, sesi kedaluwarsa, atau refresh token tidak valid.
         - `SUBSCRIPTION_EXPIRED` (402): langganan proyek habis.
         - `FORBIDDEN` (403): bukan admin.
+        - `CSRF_INVALID` (403): token CSRF tidak ada atau tidak valid; klien mengambil token baru lalu mengulang request.
         - `NOT_FOUND` (404): tidak ditemukan, termasuk proyek milik user lain.
         - `CONFLICT` (409): konflik atau duplikat.
         - `PAYLOAD_TOO_LARGE` (413): file atau payload terlalu besar.
@@ -457,6 +482,7 @@ components:
         - UNAUTHORIZED
         - SUBSCRIPTION_EXPIRED
         - FORBIDDEN
+        - CSRF_INVALID
         - NOT_FOUND
         - CONFLICT
         - PAYLOAD_TOO_LARGE

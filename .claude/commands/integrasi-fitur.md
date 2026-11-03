@@ -13,5 +13,6 @@ Tugas:
 4. Tangani error API sesuai PRD 7.1 (400, 401, 402, 403, 404, 409, 422, 429, 500, 502) dengan pesan yang jelas; error 422 tampil per field di form.
 5. Jalankan user flow terkait dari awal sampai akhir dengan API dan database sungguhan, lalu perbaiki bug yang ditemukan.
 6. Kalau fitur ini memakai endpoint publik (webhook atau tracker), berikan cara mengujinya secara lokal, misalnya contoh request webhook dengan signature yang valid.
+7. Tambahkan uji integrasi fitur ini ke repo, bukan hanya di scratchpad. Uji yang bergantung pada mock modul ini disesuaikan agar berjalan terhadap API asli. Semua uji yang sudah ada harus tetap lolos (`npm test` dan `npm run test:e2e` di `apps/web`, serta test backend).
 
-Di akhir, beri checklist acceptance criteria dan user flow yang sudah berjalan end-to-end, lalu tunggu konfirmasi.
+Di akhir, beri hasil uji, checklist acceptance criteria, dan user flow yang sudah berjalan end-to-end, lalu tunggu konfirmasi.

@@ -16,7 +16,8 @@ export interface paths {
          * @description Publik. Memasang cookie `csrf_token` (acak, bukan httpOnly agar bisa dibaca JavaScript, `SameSite=Lax`,
          *     `Secure` di produksi, `Path=/`). Klien memanggil endpoint ini sebelum request mutasi pertama bila cookie
          *     `csrf_token` belum ada, lalu mengirim nilainya di header `X-CSRF-Token`.
-         *     Bila cookie sudah ada, server boleh memakai ulang nilainya.
+         *     Selalu memasang nilai baru, juga bila cookie sudah ada: klien memanggilnya lagi setelah menerima 403
+         *     `CSRF_INVALID`.
          */
         get: operations["getCsrfToken"];
         put?: never;
@@ -209,6 +210,7 @@ export interface components {
          *     - `UNAUTHORIZED` (401): belum login, sesi kedaluwarsa, atau refresh token tidak valid.
          *     - `SUBSCRIPTION_EXPIRED` (402): langganan proyek habis.
          *     - `FORBIDDEN` (403): bukan admin.
+         *     - `CSRF_INVALID` (403): token CSRF tidak ada atau tidak valid; klien mengambil token baru lalu mengulang request.
          *     - `NOT_FOUND` (404): tidak ditemukan, termasuk proyek milik user lain.
          *     - `CONFLICT` (409): konflik atau duplikat.
          *     - `PAYLOAD_TOO_LARGE` (413): file atau payload terlalu besar.
@@ -219,7 +221,7 @@ export interface components {
          *     - `EXTERNAL_SERVICE_ERROR` (502): layanan eksternal (Meta, SMTP, dll.) gagal.
          * @enum {string}
          */
-        ErrorCode: "BAD_REQUEST" | "UNAUTHORIZED" | "SUBSCRIPTION_EXPIRED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "PAYLOAD_TOO_LARGE" | "UNSUPPORTED_MEDIA_TYPE" | "VALIDATION_ERROR" | "RATE_LIMITED" | "INTERNAL_ERROR" | "EXTERNAL_SERVICE_ERROR";
+        ErrorCode: "BAD_REQUEST" | "UNAUTHORIZED" | "SUBSCRIPTION_EXPIRED" | "FORBIDDEN" | "CSRF_INVALID" | "NOT_FOUND" | "CONFLICT" | "PAYLOAD_TOO_LARGE" | "UNSUPPORTED_MEDIA_TYPE" | "VALIDATION_ERROR" | "RATE_LIMITED" | "INTERNAL_ERROR" | "EXTERNAL_SERVICE_ERROR";
         ErrorDetail: {
             /** @example pixel_id */
             field: string;
@@ -426,6 +428,15 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Header `X-CSRF-Token` tidak ada, tidak sama dengan cookie `csrf_token`, atau token tidak valid (`CSRF_INVALID`). */
+        CsrfInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Tidak ditemukan, termasuk proyek milik user lain (`NOT_FOUND`). */
         NotFound: {
             headers: {
@@ -561,6 +572,7 @@ export interface operations {
                     };
                 };
             };
+            403: components["responses"]["CsrfInvalid"];
             /** @description Email sudah terdaftar (`CONFLICT`, `details` berisi field `email`). */
             409: components["responses"]["Conflict"];
             422: components["responses"]["ValidationError"];
@@ -594,6 +606,7 @@ export interface operations {
             };
             /** @description Email atau password salah. Pesannya umum agar tidak membocorkan email yang terdaftar. */
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["CsrfInvalid"];
             422: components["responses"]["ValidationError"];
             /** @description Lebih dari 5 percobaan dalam 15 menit per IP + email (NFR-12). */
             429: components["responses"]["TooManyRequests"];
@@ -620,6 +633,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["CsrfInvalid"];
         };
     };
     logout: {
@@ -639,6 +653,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["CsrfInvalid"];
         };
     };
     forgotPassword: {
@@ -665,6 +680,7 @@ export interface operations {
                     };
                 };
             };
+            403: components["responses"]["CsrfInvalid"];
             422: components["responses"]["ValidationError"];
             /** @description Lebih dari 3 permintaan per jam per email (NFR-12). */
             429: components["responses"]["TooManyRequests"];
@@ -696,6 +712,7 @@ export interface operations {
             };
             /** @description Token tidak valid, kedaluwarsa, atau sudah dipakai (`BAD_REQUEST`). */
             400: components["responses"]["BadRequest"];
+            403: components["responses"]["CsrfInvalid"];
             422: components["responses"]["ValidationError"];
         };
     };
@@ -743,6 +760,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            403: components["responses"]["CsrfInvalid"];
             /** @description Password lama salah (`details` berisi field `current_password`) atau password baru tidak memenuhi syarat. */
             422: components["responses"]["ValidationError"];
         };

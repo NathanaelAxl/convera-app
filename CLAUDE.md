@@ -51,6 +51,7 @@ SaaS yang mengubah percakapan WhatsApp bisnis menjadi event konversi Meta lewat 
 - Setiap fitur dikerjakan di branch sendiri yang dibuat dari `main`, dengan awalan sesuai tahap: `fe/` (frontend), `be/` (backend), atau `int/` (integrasi). Contoh: `fe/autentikasi-akun`.
 - Commit setelah fitur selesai.
 - Merge ke `main` hanya setelah saya konfirmasi.
+- Setelah branch fitur di-merge ke `main`, hapus branch-nya.
 - Jangan push kecuali saya minta.
 
 ## Perintah
@@ -64,4 +65,6 @@ SaaS yang mengubah percakapan WhatsApp bisnis menjadi event konversi Meta lewat 
 - Lint: `npm run lint`
 - Typecheck: `npm run typecheck`
 - Build produksi: `npm run build`, lalu `npm run start`
+- Uji unit, klien API, dan mock (Vitest, `tests/**/*.test.ts`): `npm test`; mode watch: `npm run test:watch`
+- Uji E2E (Playwright, `tests/e2e/*.spec.ts`): sekali di awal `npm run test:e2e:install` (mengunduh Chromium), lalu `npm run test:e2e`. Dev server di port 3000 dipakai bila sudah jalan; bila belum, dinyalakan otomatis. Laporan uji yang gagal: `npx playwright show-report`
 - Next.js 16.4 berbeda dari versi lama (Cache Components aktif). Baca panduan di `apps/web/node_modules/next/dist/docs/` sebelum memakai API Next.js yang belum pernah dipakai di repo.
