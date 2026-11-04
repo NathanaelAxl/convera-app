@@ -36,5 +36,12 @@ export type UpdateProjectSettingsRequest = Schemas["UpdateProjectSettingsRequest
 export type TestCapiResult = Schemas["TestCapiResult"]
 export type WebhookSecretResult = Schemas["WebhookSecretResult"]
 
+export type MetaEvent = Schemas["MetaEvent"]
+export type SlotSender = Schemas["SlotSender"]
+export type ValueMode = Schemas["ValueMode"]
+export type EventSlot = Schemas["EventSlot"]
+export type EventSlotInput = Schemas["EventSlotInput"]
+export type UpdateEventSlotsRequest = Schemas["UpdateEventSlotsRequest"]
+
 /** Hasil daftar berpaginasi: `data` + `meta` (PRD 7.1). */
 export type Paginated<T> = { data: T[]; meta: PaginationMeta }

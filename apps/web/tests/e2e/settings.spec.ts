@@ -414,10 +414,11 @@ test.describe("mobile", () => {
 
     const small = await page.evaluate(() => {
       const visible = (element: Element) => !element.closest("[aria-hidden='true']")
-      // Radio bergaya kartu: target sentuhnya seluruh kartu (label), bukan lingkaran radionya.
+      // Radio bergaya kartu dan Switch berlabel: target sentuhnya seluruh label, bukan lingkaran/tombolnya saja.
+      const inLabel = (element: Element) => ["radio", "switch"].includes(element.getAttribute("role") ?? "")
       const targets = [...document.querySelectorAll("main input, main button, main a, main summary")]
         .filter(visible)
-        .map((element) => (element.getAttribute("role") === "radio" ? element.closest("label") : element))
+        .map((element) => (inLabel(element) ? (element.closest("label") ?? element) : element))
         .filter((element): element is Element => element !== null)
       return targets
         .map((element) => ({

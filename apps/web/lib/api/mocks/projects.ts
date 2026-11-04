@@ -14,11 +14,13 @@ import type {
   UpdateProjectStatusRequest,
 } from "../types"
 import { mockRequireCsrf } from "./csrf"
+import { deleteProjectSlots, insertDefaultSlots } from "./mapping"
 import { DEFAULT_MOCK_USER_ID, getMockSessionUserId } from "./session"
 import { mockDelay, mockError, mockValidate, randomAlphanumeric } from "./utils"
 
 // "Tabel" projects tiruan di localStorage, berisi proyek semua user, supaya slug unik global (FR-08)
-// dan 404 untuk proyek milik user lain (FR-13) bisa dicoba. Modul `settings` (mocks/settings.ts) memakai tabel yang sama.
+// dan 404 untuk proyek milik user lain (FR-13) bisa dicoba. Modul `settings` (mocks/settings.ts) memakai tabel yang sama;
+// slot Event Mapping (mocks/mapping.ts) dibuat dan dihapus bersama proyek.
 
 export type MockProjectRecord = Project & {
   user_id: string
@@ -235,6 +237,8 @@ export async function createProject(body: CreateProjectRequest): Promise<Project
     setup_complete: false,
   }
   writeProjects([...records, record])
+  // Slot default Event Mapping (AC 4) dibuat bersama proyek, seperti dalam satu transaksi di server.
+  insertDefaultSlots(record.id, record.created_at)
   return toProject(record)
 }
 
@@ -272,4 +276,5 @@ export async function deleteProject(slug: string, body: DeleteProjectRequest): P
     ])
   }
   writeProjects(readProjects().filter((project) => project.id !== record.id))
+  deleteProjectSlots(record.id)
 }

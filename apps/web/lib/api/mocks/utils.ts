@@ -16,6 +16,14 @@ export function mockError(status: number, code: ApiErrorCode, message?: string, 
   throw new ApiError(status, code, message, details)
 }
 
+/** Nama field di `details` seperti server: indeks array memakai kurung siku, misalnya `slots[1].custom_event_name`. */
+export function formatIssuePath(path: readonly PropertyKey[]) {
+  return path.reduce<string>((field, segment) => {
+    if (typeof segment === "number") return `${field}[${segment}]`
+    return field ? `${field}.${String(segment)}` : String(segment)
+  }, "")
+}
+
 /** Validasi body seperti server: gagal → 422 `VALIDATION_ERROR` dengan detail per field. */
 export function mockValidate<T extends z.ZodType>(schema: T, body: unknown): z.output<T> {
   const result = schema.safeParse(body)
@@ -24,7 +32,7 @@ export function mockValidate<T extends z.ZodType>(schema: T, body: unknown): z.o
     422,
     "VALIDATION_ERROR",
     "Data tidak valid.",
-    result.error.issues.map((issue) => ({ field: issue.path.join("."), message: issue.message })),
+    result.error.issues.map((issue) => ({ field: formatIssuePath(issue.path), message: issue.message })),
   )
 }
 

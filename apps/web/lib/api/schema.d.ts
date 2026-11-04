@@ -367,6 +367,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{slug}/event-slots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Daftar slot Event Mapping, urut sesuai funnel
+         * @description FR-20–FR-24. Diurutkan menurut `position` (mulai 1). Proyek baru sudah punya 4 slot default (AC 4 [asumsi]):
+         *     Contact aktif (pengirim customer, tanpa keyword), lalu Lead, InitiateCheckout, dan Purchase tidak aktif
+         *     sebagai templat.
+         *
+         *     Field Fase 2 di contoh PRD 7.6 (`min_chat`, `scoring_enabled`, `score_mode`, `score_threshold`,
+         *     `scoring_keywords`) ditambahkan di Fase 2 (Lead Scoring & Chat Minimum); sampai saat itu kolomnya memakai
+         *     default database dan tidak dikirim.
+         */
+        get: operations["listEventSlots"];
+        /**
+         * Simpan seluruh slot sekaligus (atomik)
+         * @description Menyimpan seluruh slot dalam satu transaksi (AC 5): slot dengan `id` diperbarui dan ID-nya tetap (AC 6,
+         *     riwayat event tetap terhubung lewat `events.slot_id`), slot tanpa `id` dibuat, slot milik proyek yang tidak
+         *     dikirim dihapus (`events.slot_id` menjadi NULL). `position` mengikuti urutan array, mulai 1.
+         *
+         *     Aturan validasi (semua string di-trim dulu). Satu pesan per field; `details[].field` memakai format
+         *     `slots[<indeks>].<field>`, indeks mulai 0, misalnya `slots[1].custom_event_name`.
+         *     - `slots`: maksimal 20 slot [usulan, PRD belum menetapkan batas]; boleh kosong.
+         *     - `id`: harus slot milik proyek ini dan tidak boleh muncul dua kali ("Slot tidak ditemukan. Muat ulang
+         *       halaman lalu coba lagi." / "Slot ini muncul lebih dari sekali.").
+         *     - `custom_event_name`: wajib bila `meta_event` = `CustomEvent` ("Nama custom event wajib diisi."), hanya
+         *       huruf, angka, dan underscore, maksimal 50 karakter (AC 2 [asumsi]). Untuk event lain diabaikan dan
+         *       disimpan `null`.
+         *     - `trigger_keywords`: kosong = semua pesan (FR-22); dicocokkan tanpa membedakan huruf besar/kecil.
+         *       Maksimal 20 keyword per slot, tiap keyword 1–100 karakter, tidak boleh ada yang sama (tanpa membedakan
+         *       huruf besar/kecil) [usulan batas].
+         *     - `value_mode`: event bernilai (glosarium PRD 1.6) adalah Purchase, AddPaymentInfo, AddToCart,
+         *       AddToWishlist, StartTrial, Subscribe, dan CustomEvent.
+         *       - Event tidak bernilai wajib `none` ("Cara mengambil nilai hanya untuk event bernilai.").
+         *       - Event standar bernilai wajib `auto`, `keyword`, atau `fixed` ("Pilih cara mengambil nilai.")
+         *         [usulan: Meta mewajibkan `value` untuk Purchase]. CustomEvent boleh `none` (contoh PRD 7.6).
+         *       - `keyword` mewajibkan minimal satu keyword trigger; error dipasang di field `trigger_keywords`
+         *         ("Isi minimal satu keyword trigger untuk mengambil angka setelah keyword.").
+         *     - `fixed_value`: wajib dan > 0 bila `value_mode` = `fixed` (AC 3), maksimal 999.999.999.999,99 dan 2
+         *       angka desimal (`NUMERIC(14,2)`). Untuk mode lain diabaikan dan disimpan `null`.
+         *
+         *     Field Fase 2 (`min_chat`, scoring) belum diterima; bila dikirim diabaikan.
+         */
+        put: operations["updateEventSlots"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -711,6 +769,103 @@ export interface components {
             webhook_secret: string;
             /** @example true */
             has_webhook_secret: boolean;
+        };
+        /**
+         * @description `event_slots.meta_event` (CHECK di PRD 6.2): 16 event standar Meta, atau `CustomEvent` dengan nama di
+         *     `custom_event_name`. Nilai lain ditolak 422 ("Pilih event Meta.").
+         * @enum {string}
+         */
+        MetaEvent: "Contact" | "Lead" | "InitiateCheckout" | "Purchase" | "CompleteRegistration" | "AddToCart" | "AddToWishlist" | "AddPaymentInfo" | "Search" | "ViewContent" | "Subscribe" | "StartTrial" | "SubmitApplication" | "Schedule" | "FindLocation" | "CustomizeProduct" | "CustomEvent";
+        /**
+         * @description Filter pengirim pesan yang boleh memicu slot (FR-23). `both` = Keduanya (default).
+         * @enum {string}
+         */
+        SlotSender: "customer" | "cs" | "both";
+        /**
+         * @description Cara mengambil nilai uang dari pesan (FR-24): `none` tanpa nilai, `auto` angka terbesar di pesan
+         *     (mendukung `1.250.000`, `1,25 jt`, `250rb`, `250k`), `keyword` angka pertama tepat setelah keyword trigger
+         *     yang cocok, `fixed` selalu `fixed_value`.
+         * @enum {string}
+         */
+        ValueMode: "none" | "auto" | "keyword" | "fixed";
+        /**
+         * @description Satu baris `event_slots`. Field Fase 2 di contoh PRD 7.6 (`min_chat`, `scoring_enabled`, `score_mode`,
+         *     `score_threshold`, `scoring_keywords`) ditambahkan di Fase 2.
+         */
+        EventSlot: {
+            /**
+             * Format: uuid
+             * @example a1f3c9d2-4b5e-4c6d-8e7f-9a0b1c2d3e4f
+             */
+            id: string;
+            /**
+             * @description Urutan funnel, mulai 1.
+             * @example 1
+             */
+            position: number;
+            /** @example true */
+            is_active: boolean;
+            meta_event: components["schemas"]["MetaEvent"];
+            /**
+             * @description Terisi hanya bila `meta_event` = `CustomEvent`.
+             * @example null
+             */
+            custom_event_name: string | null;
+            /**
+             * @description Kosong = semua pesan.
+             * @example []
+             */
+            trigger_keywords: string[];
+            sender: components["schemas"]["SlotSender"];
+            value_mode: components["schemas"]["ValueMode"];
+            /**
+             * @description Nominal IDR; terisi hanya bila `value_mode` = `fixed`.
+             * @example null
+             */
+            fixed_value: number | null;
+        };
+        /**
+         * @description Satu slot di `PUT /event-slots`. Tanpa `id` (atau `null`) = slot baru. Aturan validasi lengkap ada di
+         *     deskripsi endpoint.
+         */
+        EventSlotInput: {
+            /**
+             * Format: uuid
+             * @example a1f3c9d2-4b5e-4c6d-8e7f-9a0b1c2d3e4f
+             */
+            id?: string | null;
+            /** @example true */
+            is_active: boolean;
+            meta_event: components["schemas"]["MetaEvent"];
+            /**
+             * @description Wajib bila `meta_event` = `CustomEvent`: huruf, angka, dan underscore, maksimal 50 karakter. Pesan
+             *     error: "Nama custom event wajib diisi." / "Nama custom event hanya boleh berisi huruf, angka, dan
+             *     underscore." / "Nama custom event maksimal 50 karakter."
+             * @example TanyaOngkir
+             */
+            custom_event_name?: string | null;
+            /**
+             * @description Pesan error (field `trigger_keywords`): "Keyword tidak boleh kosong." / "Keyword maksimal 100
+             *     karakter." / "Maksimal 20 keyword per slot." / "Keyword \"harga\" ditulis lebih dari sekali."
+             * @example [
+             *       "ongkir",
+             *       "ongkos kirim"
+             *     ]
+             */
+            trigger_keywords: string[];
+            sender: components["schemas"]["SlotSender"];
+            value_mode: components["schemas"]["ValueMode"];
+            /**
+             * @description Wajib bila `value_mode` = `fixed`. Pesan error: "Nominal wajib diisi untuk nilai tetap." / "Nominal
+             *     harus lebih dari 0." / "Nominal maksimal Rp 999.999.999.999,99." / "Nominal maksimal 2 angka di belakang
+             *     koma."
+             * @example null
+             */
+            fixed_value?: number | null;
+        };
+        UpdateEventSlotsRequest: {
+            /** @description Seluruh slot proyek, urut sesuai funnel. Lebih dari 20 → "Maksimal 20 slot per proyek." */
+            slots: components["schemas"]["EventSlotInput"][];
         };
     };
     responses: {
@@ -1358,6 +1513,71 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["CsrfInvalid"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    listEventSlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EventSlot"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateEventSlots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEventSlotsRequest"];
+            };
+        };
+        responses: {
+            /** @description Tersimpan. Daftar slot terbaru dengan format yang sama seperti `GET /event-slots`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["EventSlot"][];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description Ada slot yang tidak valid; tidak ada perubahan yang tersimpan (AC 5). Contoh `details`:
+             *     `{ "field": "slots[1].custom_event_name", "message": "Nama custom event wajib diisi." }`.
+             *     Error untuk daftar secara keseluruhan memakai field `slots`.
+             */
+            422: components["responses"]["ValidationError"];
         };
     };
 }
