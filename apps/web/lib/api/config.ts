@@ -16,7 +16,7 @@ export type ApiModule =
  * Modul yang masih memakai data mock dari `lib/api/mocks`.
  * Tahap integrasi = menghapus modul dari daftar ini; halaman tidak perlu diubah.
  */
-export const MOCK_MODULES: readonly ApiModule[] = ["auth", "projects"]
+export const MOCK_MODULES: readonly ApiModule[] = ["auth", "projects", "settings"]
 
 export function isMocked(module: ApiModule) {
   return MOCK_MODULES.includes(module)

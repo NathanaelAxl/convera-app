@@ -20,6 +20,7 @@ import type { Project } from "@/lib/api/types"
 import { cn } from "@/lib/utils"
 
 import { CreateProjectDialog } from "./projects/create-project-dialog"
+import { requestNavigation } from "./unsaved-changes-guard"
 
 function StatusDot({ active }: { active: boolean }) {
   return (
@@ -82,8 +83,14 @@ export function ProjectSwitcher({ projects, activeSlug, onNavigate }: ProjectSwi
           <DropdownMenuRadioGroup
             value={activeSlug}
             onValueChange={(slug) => {
-              router.push(hrefFor(slug))
-              onNavigate?.()
+              // Ada perubahan belum disimpan (misalnya di Pengaturan): konfirmasi dulu, fokus tetap di dialog.
+              openingDialog.current = requestNavigation({
+                navigate: () => {
+                  router.push(hrefFor(slug))
+                  onNavigate?.()
+                },
+                returnFocus: triggerRef.current,
+              })
             }}
           >
             {projects.map((project) => (

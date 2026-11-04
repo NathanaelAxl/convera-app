@@ -1,7 +1,7 @@
 "use client"
 
 import { CheckIcon, CopyIcon } from "lucide-react"
-import { useEffect, useId, useState } from "react"
+import { useEffect, useId, useState, type ReactNode } from "react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -13,14 +13,17 @@ type CopyFieldProps = {
   value: string
   /** Label terlihat di atas field. Bila tidak ada, `aria-label` field memakai `label` ini juga. */
   label?: string
+  /** Teks bantuan di bawah field, ditautkan lewat `aria-describedby`. */
+  description?: ReactNode
   id?: string
   className?: string
 }
 
 /** Input read-only + tombol salin satu klik (PRD 8.2). Notifikasi "Tersalin" dibacakan lewat toast `aria-live`. */
-export function CopyField({ value, label, id, className }: CopyFieldProps) {
+export function CopyField({ value, label, description, id, className }: CopyFieldProps) {
   const generatedId = useId()
   const inputId = id ?? generatedId
+  const descriptionId = `${inputId}-description`
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -47,6 +50,7 @@ export function CopyField({ value, label, id, className }: CopyFieldProps) {
           id={inputId}
           value={value}
           readOnly
+          aria-describedby={description ? descriptionId : undefined}
           onFocus={(event) => event.currentTarget.select()}
           className="font-mono text-xs md:text-xs"
         />
@@ -54,6 +58,11 @@ export function CopyField({ value, label, id, className }: CopyFieldProps) {
           {copied ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
         </Button>
       </div>
+      {description && (
+        <p id={descriptionId} className="text-sm text-muted-foreground">
+          {description}
+        </p>
+      )}
     </div>
   )
 }

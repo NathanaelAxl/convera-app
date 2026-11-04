@@ -32,6 +32,8 @@ tags:
     description: Akun (PRD 7.3)
   - name: projects
     description: Proyek (PRD 7.4)
+  - name: settings
+    description: Pengaturan proyek, Meta CAPI & koneksi WhatsApp (PRD 7.5)
 
 paths:
   /auth/csrf:
@@ -450,6 +452,153 @@ paths:
         "422":
           $ref: "#/components/responses/ValidationError"
           description: "`is_active` tidak ada atau bukan boolean (`details` berisi field `is_active`)."
+
+  /projects/{slug}/settings:
+    parameters:
+      - $ref: "#/components/parameters/ProjectSlug"
+    get:
+      tags: [settings]
+      operationId: getProjectSettings
+      summary: Pengaturan proyek (info proyek, Meta CAPI, koneksi WhatsApp)
+      description: |
+        Access Token CAPI dan Webhook Secret tidak pernah dikembalikan utuh (NFR-09): token hanya sebagai
+        `capi_access_token_masked` (8 karakter `•` + 4 karakter terakhir), secret hanya sebagai `has_webhook_secret`.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ProjectSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [settings]
+      operationId: updateProjectSettings
+      summary: Simpan semua pengaturan proyek sekaligus
+      description: |
+        Semua kartu di halaman Pengaturan disimpan bersama (FR-10, FR-14, FR-15, FR-17, FR-19).
+        - `capi_access_token` dan `webhook_secret`: dihilangkan, `null`, atau string kosong = nilai lama tetap
+          (AC 2: field token yang dibiarkan kosong tidak menghapus token lama). Nilai baru disimpan terenkripsi
+          AES-256-GCM ke `capi_access_token_enc` / `webhook_secret_enc` dan tidak ditulis ke log.
+        - `pixel_id` dan `test_event_code`: `null` atau string kosong = dikosongkan (UF-01 langkah 11: Test Event
+          Code dikosongkan saat proyek live).
+        - Semua string di-trim dulu sebelum divalidasi dan disimpan.
+        - Validasi gagal → 422, tidak ada yang tersimpan; `details` berisi satu pesan per field.
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectSettingsRequest"
+      responses:
+        "200":
+          description: Tersimpan. Objek yang sama seperti `GET /settings`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ProjectSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+          description: |
+            Misalnya Pixel ID bukan angka atau panjangnya di luar 10–20 digit, provider tidak dikenal, atau
+            `wa_connection_type` = `qr` sebelum Fase 5. `details[].field` memakai nama field request.
+
+  /projects/{slug}/settings/test-capi:
+    parameters:
+      - $ref: "#/components/parameters/ProjectSlug"
+    post:
+      tags: [settings]
+      operationId: testProjectCapi
+      summary: Kirim satu event uji ke Meta CAPI
+      description: |
+        FR-18 [asumsi]. Memakai Pixel ID, Access Token, dan Test Event Code yang sudah tersimpan (bukan isi form
+        yang belum disimpan). Jawaban Meta, berhasil maupun ditolak, dikembalikan sebagai 200; `message` berisi
+        pesan error dari Meta. Bila `test_event_code` kosong, event dikirim tanpa kode uji
+        (`used_test_event_code` = `null`) sehingga tercatat sebagai event biasa di Events Manager.
+
+        Catatan backend [usulan, perlu konfirmasi]: karena jawaban Meta harus langsung tampil, event uji dikirim
+        oleh API (bukan worker) dan tidak dicatat di `events`. Endpoint ini belum punya rate limit di NFR-12.
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      responses:
+        "200":
+          description: Jawaban Meta (berhasil maupun ditolak).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/TestCapiResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "402":
+          $ref: "#/components/responses/SubscriptionExpired"
+          description: Proyek terkunci karena trial atau langganan habis [asumsi PRD 7.1].
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+          description: Pixel ID atau Access Token belum tersimpan (`details` berisi field `pixel_id` dan/atau `capi_access_token`).
+        "502":
+          $ref: "#/components/responses/ExternalServiceError"
+          description: Meta tidak bisa dihubungi (timeout, error jaringan, atau 5xx dari Meta).
+
+  /projects/{slug}/settings/webhook-secret:
+    parameters:
+      - $ref: "#/components/parameters/ProjectSlug"
+    post:
+      tags: [settings]
+      operationId: createProjectWebhookSecret
+      summary: Buat Webhook Secret baru (mode generik)
+      description: |
+        FR-17. Secret baru langsung menggantikan secret lama; webhook yang masih ditandatangani dengan secret lama
+        dijawab 401. Secret utuh hanya ada di respons ini (AC 5) dan tidak ditulis ke log.
+        Format: `whsec_` + 32 karakter `[A-Za-z0-9]` dari CSPRNG.
+      security:
+        - cookieAuth: []
+          csrfToken: []
+      responses:
+        "201":
+          description: Secret dibuat dan disimpan terenkripsi.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/WebhookSecretResult"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/CsrfInvalid"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
 components:
   securitySchemes:
@@ -999,3 +1148,160 @@ components:
           maxLength: 100
           description: Harus sama dengan nama proyek (keduanya di-trim, peka huruf besar/kecil).
           example: Toko Dummy & Co. 2026!
+
+    WaProvider:
+      type: string
+      maxLength: 30
+      description: |
+        Kode adapter provider WABA (`projects.wa_provider`). Hanya mode generik sampai Pertanyaan Terbuka 2
+        diputuskan; adapter lain ditambahkan ke enum ini.
+      enum: [generic]
+
+    PixelId:
+      type: string
+      pattern: "^([0-9]{10,20})?$"
+      description: |
+        Hanya angka, 10–20 digit (default Pertanyaan Terbuka 3). Di-trim dulu.
+        Pesan error: bukan angka → "Pixel ID hanya boleh berisi angka."; panjang di luar batas →
+        "Pixel ID harus 10 sampai 20 digit."
+      example: "123456789012345"
+
+    TestEventCode:
+      type: string
+      pattern: "^[A-Za-z0-9]*$"
+      maxLength: 50
+      description: Kode dari Meta Events Manager, hanya huruf dan angka. Di-trim dulu.
+      example: TEST48213
+
+    ProjectSettings:
+      type: object
+      description: |
+        Respons `GET` dan `PUT /projects/{slug}/settings`. Field `tracker_snippet` di contoh PRD 7.5 ditambahkan di
+        Fase 2 (Tracker Landing Page).
+      required:
+        - name
+        - business_category
+        - pixel_id
+        - has_capi_access_token
+        - capi_access_token_masked
+        - test_event_code
+        - wa_connection_type
+        - wa_provider
+        - webhook_url
+        - has_webhook_secret
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          example: Toko Dummy & Co. 2026!
+        business_category:
+          $ref: "#/components/schemas/BusinessCategory"
+        pixel_id:
+          type: ["string", "null"]
+          pattern: "^[0-9]{10,20}$"
+          example: "123456789012345"
+        has_capi_access_token:
+          type: boolean
+          example: true
+        capi_access_token_masked:
+          type: ["string", "null"]
+          description: |
+            8 karakter `•` + 4 karakter terakhir token (AC 2); `null` bila belum ada token. Token yang lebih pendek
+            dari 16 karakter hanya ditampilkan sebagai `••••••••` agar tidak terbuka hampir utuh.
+          example: ••••••••Zx9a
+        test_event_code:
+          type: ["string", "null"]
+          maxLength: 50
+          example: TEST48213
+        wa_connection_type:
+          $ref: "#/components/schemas/WaConnectionType"
+        wa_provider:
+          $ref: "#/components/schemas/WaProvider"
+        webhook_url:
+          type: string
+          format: uri
+          example: https://api.example.com/api/v1/webhooks/wa/k7Qm2xPz9LwR4tVb8NcY1sDf6GhJ3aEu
+        has_webhook_secret:
+          type: boolean
+          example: true
+
+    UpdateProjectSettingsRequest:
+      type: object
+      required: [name, business_category, pixel_id, test_event_code, wa_connection_type, wa_provider]
+      properties:
+        name:
+          $ref: "#/components/schemas/ProjectName"
+        business_category:
+          $ref: "#/components/schemas/BusinessCategory"
+        pixel_id:
+          description: "`null` atau string kosong = dikosongkan."
+          oneOf:
+            - $ref: "#/components/schemas/PixelId"
+            - type: "null"
+        capi_access_token:
+          type: ["string", "null"]
+          maxLength: 1000
+          pattern: "^\\S*$"
+          description: |
+            Token baru. Dihilangkan, `null`, atau string kosong = token lama tetap (AC 2). Tanpa spasi, maksimal
+            1.000 karakter. Pesan error: "Access Token tidak boleh mengandung spasi." /
+            "Access Token maksimal 1000 karakter."
+          example: EAAG...tokenbaru
+        test_event_code:
+          description: "`null` atau string kosong = dikosongkan. Pesan error: \"Test Event Code hanya boleh berisi huruf dan angka.\" / \"Test Event Code maksimal 50 karakter.\""
+          oneOf:
+            - $ref: "#/components/schemas/TestEventCode"
+            - type: "null"
+        wa_connection_type:
+          $ref: "#/components/schemas/WaConnectionType"
+          description: "`qr` ditolak 422 (\"Koneksi lewat scan QR belum tersedia.\") sampai Fase 5."
+        wa_provider:
+          $ref: "#/components/schemas/WaProvider"
+          description: Nilai di luar enum ditolak 422 ("Provider tidak dikenal.").
+        webhook_secret:
+          type: ["string", "null"]
+          maxLength: 256
+          pattern: "^(\\S{16,256})?$"
+          description: |
+            Secret dari provider. Dihilangkan, `null`, atau string kosong = secret lama tetap. Bila diisi: 16–256
+            karakter tanpa spasi [usulan, PRD belum menetapkan batas]. Pesan error: "Webhook Secret minimal 16
+            karakter." / "Webhook Secret maksimal 256 karakter." / "Webhook Secret tidak boleh mengandung spasi."
+          example: null
+
+    TestCapiResult:
+      type: object
+      required: [success, events_received, fbtrace_id, message, used_test_event_code]
+      properties:
+        success:
+          type: boolean
+          example: true
+        events_received:
+          type: integer
+          minimum: 0
+          description: "`events_received` dari jawaban Meta; 0 bila ditolak."
+          example: 1
+        fbtrace_id:
+          type: ["string", "null"]
+          description: ID jejak dari Meta untuk dilaporkan ke dukungan Meta; `null` bila Meta tidak mengirimkannya.
+          example: AbC12dEfG3h
+        message:
+          type: ["string", "null"]
+          description: Pesan error dari Meta bila ditolak; `null` bila berhasil.
+          example: null
+        used_test_event_code:
+          type: ["string", "null"]
+          description: Test Event Code yang dipakai; `null` bila dikirim tanpa kode uji.
+          example: TEST48213
+
+    WebhookSecretResult:
+      type: object
+      required: [webhook_secret, has_webhook_secret]
+      properties:
+        webhook_secret:
+          type: string
+          pattern: "^whsec_[A-Za-z0-9]{32}$"
+          description: Secret utuh, hanya ditampilkan sekali.
+          example: whsec_4Jd8Kq2Lm7Np1Rs5Tv9Xz3Bc6Fh0Gk
+        has_webhook_secret:
+          type: boolean
+          example: true

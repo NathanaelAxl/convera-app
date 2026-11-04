@@ -275,6 +275,95 @@ export interface paths {
         patch: operations["updateProjectStatus"];
         trace?: never;
     };
+    "/projects/{slug}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Pengaturan proyek (info proyek, Meta CAPI, koneksi WhatsApp)
+         * @description Access Token CAPI dan Webhook Secret tidak pernah dikembalikan utuh (NFR-09): token hanya sebagai
+         *     `capi_access_token_masked` (8 karakter `•` + 4 karakter terakhir), secret hanya sebagai `has_webhook_secret`.
+         */
+        get: operations["getProjectSettings"];
+        /**
+         * Simpan semua pengaturan proyek sekaligus
+         * @description Semua kartu di halaman Pengaturan disimpan bersama (FR-10, FR-14, FR-15, FR-17, FR-19).
+         *     - `capi_access_token` dan `webhook_secret`: dihilangkan, `null`, atau string kosong = nilai lama tetap
+         *       (AC 2: field token yang dibiarkan kosong tidak menghapus token lama). Nilai baru disimpan terenkripsi
+         *       AES-256-GCM ke `capi_access_token_enc` / `webhook_secret_enc` dan tidak ditulis ke log.
+         *     - `pixel_id` dan `test_event_code`: `null` atau string kosong = dikosongkan (UF-01 langkah 11: Test Event
+         *       Code dikosongkan saat proyek live).
+         *     - Semua string di-trim dulu sebelum divalidasi dan disimpan.
+         *     - Validasi gagal → 422, tidak ada yang tersimpan; `details` berisi satu pesan per field.
+         */
+        put: operations["updateProjectSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{slug}/settings/test-capi": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Kirim satu event uji ke Meta CAPI
+         * @description FR-18 [asumsi]. Memakai Pixel ID, Access Token, dan Test Event Code yang sudah tersimpan (bukan isi form
+         *     yang belum disimpan). Jawaban Meta, berhasil maupun ditolak, dikembalikan sebagai 200; `message` berisi
+         *     pesan error dari Meta. Bila `test_event_code` kosong, event dikirim tanpa kode uji
+         *     (`used_test_event_code` = `null`) sehingga tercatat sebagai event biasa di Events Manager.
+         *
+         *     Catatan backend [usulan, perlu konfirmasi]: karena jawaban Meta harus langsung tampil, event uji dikirim
+         *     oleh API (bukan worker) dan tidak dicatat di `events`. Endpoint ini belum punya rate limit di NFR-12.
+         */
+        post: operations["testProjectCapi"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{slug}/settings/webhook-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Buat Webhook Secret baru (mode generik)
+         * @description FR-17. Secret baru langsung menggantikan secret lama; webhook yang masih ditandatangani dengan secret lama
+         *     dijawab 401. Secret utuh hanya ada di respons ini (AC 5) dan tidak ditulis ke log.
+         *     Format: `whsec_` + 32 karakter `[A-Za-z0-9]` dari CSPRNG.
+         */
+        post: operations["createProjectWebhookSecret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -512,6 +601,112 @@ export interface components {
              * @example Toko Dummy & Co. 2026!
              */
             confirm_name: string;
+        };
+        /**
+         * @description Kode adapter provider WABA (`projects.wa_provider`). Hanya mode generik sampai Pertanyaan Terbuka 2
+         *     diputuskan; adapter lain ditambahkan ke enum ini.
+         * @enum {string}
+         */
+        WaProvider: "generic";
+        /**
+         * @description Hanya angka, 10–20 digit (default Pertanyaan Terbuka 3). Di-trim dulu.
+         *     Pesan error: bukan angka → "Pixel ID hanya boleh berisi angka."; panjang di luar batas →
+         *     "Pixel ID harus 10 sampai 20 digit."
+         * @example 123456789012345
+         */
+        PixelId: string;
+        /**
+         * @description Kode dari Meta Events Manager, hanya huruf dan angka. Di-trim dulu.
+         * @example TEST48213
+         */
+        TestEventCode: string;
+        /**
+         * @description Respons `GET` dan `PUT /projects/{slug}/settings`. Field `tracker_snippet` di contoh PRD 7.5 ditambahkan di
+         *     Fase 2 (Tracker Landing Page).
+         */
+        ProjectSettings: {
+            /** @example Toko Dummy & Co. 2026! */
+            name: string;
+            business_category: components["schemas"]["BusinessCategory"];
+            /** @example 123456789012345 */
+            pixel_id: string | null;
+            /** @example true */
+            has_capi_access_token: boolean;
+            /**
+             * @description 8 karakter `•` + 4 karakter terakhir token; `null` bila belum ada token.
+             * @example ••••••••Zx9a
+             */
+            capi_access_token_masked: string | null;
+            /** @example TEST48213 */
+            test_event_code: string | null;
+            wa_connection_type: components["schemas"]["WaConnectionType"];
+            wa_provider: components["schemas"]["WaProvider"];
+            /**
+             * Format: uri
+             * @example https://api.example.com/api/v1/webhooks/wa/k7Qm2xPz9LwR4tVb8NcY1sDf6GhJ3aEu
+             */
+            webhook_url: string;
+            /** @example true */
+            has_webhook_secret: boolean;
+        };
+        UpdateProjectSettingsRequest: {
+            name: components["schemas"]["ProjectName"];
+            business_category: components["schemas"]["BusinessCategory"];
+            /** @description `null` atau string kosong = dikosongkan. */
+            pixel_id: components["schemas"]["PixelId"] | null;
+            /**
+             * @description Token baru. Dihilangkan, `null`, atau string kosong = token lama tetap (AC 2). Tanpa spasi, maksimal
+             *     1.000 karakter. Pesan error: "Access Token tidak boleh mengandung spasi." /
+             *     "Access Token maksimal 1000 karakter."
+             * @example EAAG...tokenbaru
+             */
+            capi_access_token?: string | null;
+            /** @description `null` atau string kosong = dikosongkan. Pesan error: "Test Event Code hanya boleh berisi huruf dan angka." / "Test Event Code maksimal 50 karakter." */
+            test_event_code: components["schemas"]["TestEventCode"] | null;
+            /** @description `qr` ditolak 422 ("Koneksi lewat scan QR belum tersedia.") sampai Fase 5. */
+            wa_connection_type: components["schemas"]["WaConnectionType"];
+            /** @description Nilai di luar enum ditolak 422 ("Provider tidak dikenal."). */
+            wa_provider: components["schemas"]["WaProvider"];
+            /**
+             * @description Secret dari provider. Dihilangkan, `null`, atau string kosong = secret lama tetap. Bila diisi: 16–256
+             *     karakter tanpa spasi [usulan, PRD belum menetapkan batas]. Pesan error: "Webhook Secret minimal 16
+             *     karakter." / "Webhook Secret maksimal 256 karakter." / "Webhook Secret tidak boleh mengandung spasi."
+             * @example null
+             */
+            webhook_secret?: string | null;
+        };
+        TestCapiResult: {
+            /** @example true */
+            success: boolean;
+            /**
+             * @description `events_received` dari jawaban Meta; 0 bila ditolak.
+             * @example 1
+             */
+            events_received: number;
+            /**
+             * @description ID jejak dari Meta untuk dilaporkan ke dukungan Meta; `null` bila Meta tidak mengirimkannya.
+             * @example AbC12dEfG3h
+             */
+            fbtrace_id: string | null;
+            /**
+             * @description Pesan error dari Meta bila ditolak; `null` bila berhasil.
+             * @example null
+             */
+            message: string | null;
+            /**
+             * @description Test Event Code yang dipakai; `null` bila dikirim tanpa kode uji.
+             * @example TEST48213
+             */
+            used_test_event_code: string | null;
+        };
+        WebhookSecretResult: {
+            /**
+             * @description Secret utuh, hanya ditampilkan sekali.
+             * @example whsec_4Jd8Kq2Lm7Np1Rs5Tv9Xz3Bc6Fh0Gk
+             */
+            webhook_secret: string;
+            /** @example true */
+            has_webhook_secret: boolean;
         };
     };
     responses: {
@@ -1031,6 +1226,132 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description `is_active` tidak ada atau bukan boolean (`details` berisi field `is_active`). */
             422: components["responses"]["ValidationError"];
+        };
+    };
+    getProjectSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProjectSettings"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateProjectSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Tersimpan. Objek yang sama seperti `GET /settings`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["ProjectSettings"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            /**
+             * @description Misalnya Pixel ID bukan angka atau panjangnya di luar 10–20 digit, provider tidak dikenal, atau
+             *     `wa_connection_type` = `qr` sebelum Fase 5. `details[].field` memakai nama field request.
+             */
+            422: components["responses"]["ValidationError"];
+        };
+    };
+    testProjectCapi: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Jawaban Meta (berhasil maupun ditolak). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["TestCapiResult"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description Proyek terkunci karena trial atau langganan habis [asumsi PRD 7.1]. */
+            402: components["responses"]["SubscriptionExpired"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
+            /** @description Pixel ID atau Access Token belum tersimpan (`details` berisi field `pixel_id` dan/atau `capi_access_token`). */
+            422: components["responses"]["ValidationError"];
+            /** @description Meta tidak bisa dihubungi (timeout, error jaringan, atau 5xx dari Meta). */
+            502: components["responses"]["ExternalServiceError"];
+        };
+    };
+    createProjectWebhookSecret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `projects.slug` */
+                slug: components["parameters"]["ProjectSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret dibuat dan disimpan terenkripsi. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["WebhookSecretResult"];
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["CsrfInvalid"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

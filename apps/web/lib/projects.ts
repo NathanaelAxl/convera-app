@@ -1,4 +1,4 @@
-import type { BusinessCategory, Project } from "@/lib/api/types"
+import type { BusinessCategory, Project, WaProvider } from "@/lib/api/types"
 
 /** Panjang maksimal slug dasar; sisa kolom `projects.slug` (VARCHAR 120) untuk sufiks `-2`, `-3`, ... */
 export const SLUG_BASE_MAX_LENGTH = 100
@@ -49,13 +49,14 @@ export const BUSINESS_CATEGORY_LABELS: Record<BusinessCategory, string> = {
   finance: "Keuangan",
 }
 
-/** Provider WABA yang punya adapter. Hanya mode generik sampai Pertanyaan Terbuka 2 diputuskan. */
-const WA_PROVIDER_LABELS: Record<string, string> = {
+/** Provider WABA yang punya adapter (enum `WaProvider`). Hanya mode generik sampai Pertanyaan Terbuka 2 diputuskan. */
+export const WA_PROVIDER_LABELS: Record<WaProvider, string> = {
   generic: "Generik",
 }
 
 /** "WABA · Generik"; kode provider yang belum dikenal ditampilkan apa adanya. */
 export function waConnectionLabel(project: Pick<Project, "wa_connection_type" | "wa_provider">) {
   if (project.wa_connection_type === "qr") return "QR"
-  return `WABA · ${WA_PROVIDER_LABELS[project.wa_provider] ?? project.wa_provider}`
+  const labels: Record<string, string> = WA_PROVIDER_LABELS
+  return `WABA · ${labels[project.wa_provider] ?? project.wa_provider}`
 }
