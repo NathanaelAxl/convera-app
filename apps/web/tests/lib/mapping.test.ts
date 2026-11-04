@@ -114,7 +114,7 @@ describe("daftar event dan event bernilai", () => {
     ])
   })
 
-  it("event bernilai sesuai glosarium PRD 1.6; hanya Custom Event yang boleh tanpa nilai di antaranya", () => {
+  it("event bernilai sesuai glosarium PRD 1.6; hanya Purchase yang wajib memilih cara mengambil nilai", () => {
     expect(META_EVENTS.filter(isValueEvent)).toEqual([
       "Purchase",
       "AddToCart",
@@ -124,9 +124,7 @@ describe("daftar event dan event bernilai", () => {
       "StartTrial",
       "CustomEvent",
     ])
-    expect(allowsNoValue("Purchase")).toBe(false)
-    expect(allowsNoValue("CustomEvent")).toBe(true)
-    expect(allowsNoValue("Lead")).toBe(true)
+    expect(META_EVENTS.filter((event) => !allowsNoValue(event))).toEqual(["Purchase"])
   })
 
   it("nama event yang dikirim: nama custom event untuk Custom Event", () => {
@@ -215,7 +213,7 @@ describe("skema form Event Mapping (sama dengan server)", () => {
     ])
   })
 
-  it("AC 3: cara mengambil nilai hanya untuk event bernilai; event standar bernilai wajib memilih", () => {
+  it("AC 3: cara mengambil nilai hanya untuk event bernilai; hanya Purchase yang wajib memilih", () => {
     expect(formErrors({ meta_event: "Lead", value_mode: "auto" })).toEqual([
       { field: "slots.0.value_mode", message: "Cara mengambil nilai hanya untuk event bernilai." },
     ])
@@ -223,6 +221,9 @@ describe("skema form Event Mapping (sama dengan server)", () => {
       { field: "slots.0.value_mode", message: "Pilih cara mengambil nilai." },
     ])
     expect(formErrors({ meta_event: "CustomEvent", custom_event_name: "TanyaOngkir", value_mode: "none" })).toEqual([])
+    for (const event of ["AddToCart", "AddToWishlist", "AddPaymentInfo", "Subscribe", "StartTrial"] as const) {
+      expect(formErrors({ meta_event: event, value_mode: "none" }), event).toEqual([])
+    }
     expect(formErrors({ meta_event: "Purchase", value_mode: "auto" })).toEqual([])
   })
 

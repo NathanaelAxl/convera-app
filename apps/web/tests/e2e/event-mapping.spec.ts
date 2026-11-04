@@ -137,13 +137,21 @@ test.describe("UF-04: mengatur Event Mapping", () => {
     await expect.poll(() => eventBadges(page)).toEqual(["Contact", "Schedule", "TanyaPromo", "Purchase"])
     await expect(m.valueModes(4).getByRole("radio", { name: "Nilai tetap" })).toBeChecked()
     await expect(m.fixedValue(4)).toHaveValue("350.000")
-    // Event standar bernilai tidak punya pilihan "Tanpa nilai".
+    // Hanya Purchase yang tidak punya pilihan "Tanpa nilai" (Meta mewajibkan value untuk Purchase).
     await expect(m.valueModes(4).getByRole("radio")).toHaveCount(3)
 
     // Schedule bukan event bernilai.
     await expect(m.valueModes(2)).toHaveCount(0)
 
-    // Ganti ke AddToCart → pilihan muncul, Otomatis terpilih.
+    // Event bernilai lain boleh tanpa nilai: AddToCart dari Schedule → "Tanpa nilai" tetap terpilih.
+    await chooseEvent(page, 2, "AddToCart")
+    await expect(m.valueModes(2).getByRole("radio")).toHaveCount(4)
+    await expect(m.valueModes(2).getByRole("radio", { name: "Tanpa nilai" })).toBeChecked()
+
+    // Ganti ke Purchase → "Tanpa nilai" hilang, Otomatis terpilih; kembali ke AddToCart, Otomatis tetap.
+    await chooseEvent(page, 2, "Purchase")
+    await expect(m.valueModes(2).getByRole("radio")).toHaveCount(3)
+    await expect(m.valueModes(2).getByRole("radio", { name: "Otomatis" })).toBeChecked()
     await chooseEvent(page, 2, "AddToCart")
     await expect(m.valueModes(2).getByRole("radio", { name: "Otomatis" })).toBeChecked()
     await expect(m.valueModes(2).getByRole("radio", { name: /Otomatis/ })).toHaveAccessibleDescription(

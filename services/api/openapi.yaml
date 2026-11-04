@@ -663,8 +663,8 @@ paths:
         - `value_mode`: event bernilai (glosarium PRD 1.6) adalah Purchase, AddPaymentInfo, AddToCart,
           AddToWishlist, StartTrial, Subscribe, dan CustomEvent.
           - Event tidak bernilai wajib `none` ("Cara mengambil nilai hanya untuk event bernilai.").
-          - Event standar bernilai wajib `auto`, `keyword`, atau `fixed` ("Pilih cara mengambil nilai.")
-            [usulan: Meta mewajibkan `value` untuk Purchase]. CustomEvent boleh `none` (contoh PRD 7.6).
+          - Purchase wajib `auto`, `keyword`, atau `fixed` ("Pilih cara mengambil nilai.") karena Meta hanya
+            mewajibkan `value` untuk Purchase. Event bernilai lain, termasuk CustomEvent, boleh `none`.
           - `keyword` mewajibkan minimal satu keyword trigger; error dipasang di field `trigger_keywords`
             ("Isi minimal satu keyword trigger untuk mengambil angka setelah keyword.").
         - `fixed_value`: wajib dan > 0 bila `value_mode` = `fixed` (AC 3), maksimal 999.999.999.999,99 dan 2
@@ -1447,6 +1447,13 @@ components:
         Cara mengambil nilai uang dari pesan (FR-24): `none` tanpa nilai, `auto` angka terbesar di pesan
         (mendukung `1.250.000`, `1,25 jt`, `250rb`, `250k`), `keyword` angka pertama tepat setelah keyword trigger
         yang cocok, `fixed` selalu `fixed_value`.
+
+        Catatan backend [usulan, untuk Pipeline Webhook]:
+        - Mode `auto` mengabaikan deret angka 10 digit atau lebih tanpa pemisah ribuan, karena kemungkinan besar
+          itu nomor HP, nomor rekening, atau nomor pesanan. Contoh: "Total 150.000, transfer ke 1234567890"
+          menghasilkan 150000.
+        - Bila slot Purchase terpicu tetapi nilai tidak ditemukan di pesan, event tidak dikirim ke Meta dan dicatat
+          di Event Log berstatus `failed` dengan pesan "Nilai tidak ditemukan di pesan".
       enum: [none, auto, keyword, fixed]
 
     EventSlot:

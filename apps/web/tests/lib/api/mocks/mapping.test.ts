@@ -191,6 +191,20 @@ describe("PUT /projects/{slug}/event-slots", () => {
     expect(result[1]).toMatchObject({ custom_event_name: null, value_mode: "fixed", fixed_value: 150000 })
   })
 
+  it("hanya Purchase yang wajib memilih cara mengambil nilai; event bernilai lain boleh tanpa nilai", async () => {
+    const result = await mapping.updateEventSlots(TOKO, {
+      slots: [{ ...TANYA_ONGKIR, meta_event: "AddToCart", custom_event_name: null }],
+    })
+    expect(result[0]).toMatchObject({ meta_event: "AddToCart", value_mode: "none", fixed_value: null })
+
+    await expect(
+      mapping.updateEventSlots(TOKO, { slots: [{ ...TANYA_ONGKIR, meta_event: "Purchase", custom_event_name: null }] }),
+    ).rejects.toMatchObject({
+      status: 422,
+      details: [{ field: "slots[0].value_mode", message: "Pilih cara mengambil nilai." }],
+    })
+  })
+
   it("daftar kosong menghapus semua slot", async () => {
     await expect(mapping.updateEventSlots(TOKO, { slots: [] })).resolves.toEqual([])
     await expect(mapping.listEventSlots(TOKO)).resolves.toEqual([])

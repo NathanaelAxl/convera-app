@@ -38,9 +38,9 @@ export function isValueEvent(event: MetaEvent) {
   return VALUE_EVENTS.includes(event)
 }
 
-/** Custom Event boleh tanpa nilai (contoh PRD 7.6); event standar bernilai wajib memilih salah satu cara. */
+/** Hanya Purchase yang wajib memilih cara mengambil nilai, karena Meta hanya mewajibkan `value` untuk Purchase. */
 export function allowsNoValue(event: MetaEvent) {
-  return !isValueEvent(event) || event === "CustomEvent"
+  return event !== "Purchase"
 }
 
 /** Filter pengirim (FR-23), urutan sama dengan `ToggleGroup` di PRD 8.3. */
