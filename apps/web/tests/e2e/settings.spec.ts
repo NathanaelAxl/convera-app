@@ -44,17 +44,24 @@ async function save(page: Page) {
   await expect(saveStatus(page, "Belum ada perubahan.")).toBeVisible()
 }
 
+/** Buat proyek lewat dialog "Proyek baru"; sistem langsung membuka Pengaturan proyek tersebut. */
+async function createProject(page: Page, name: string, slug: string) {
+  await gotoReady(page, "/projects")
+  await page.getByRole("button", { name: "Proyek baru" }).click()
+  await page.getByRole("dialog", { name: "Proyek baru" }).getByLabel("Nama proyek").fill(name)
+  await page.getByRole("button", { name: "Buat proyek" }).click()
+  await expect(page).toHaveURL(new RegExp(`${settingsUrl(slug)}$`))
+}
+
+// UF-01 dipecah menjadi tiga uji (langkah 6 + 8, langkah 7, langkah 9) agar masing-masing jauh dari batas waktu 60 detik
+// saat seluruh suite berjalan paralel. Isi pemeriksaannya sama dengan uji gabungan sebelumnya.
 test.describe("UF-01 langkah 6–9: proyek baru sampai uji koneksi", () => {
   test.use({ permissions: ["clipboard-read", "clipboard-write"] })
 
-  test("isi kategori, Meta CAPI, salin Webhook URL, buat secret, simpan; uji koneksi ditolak Meta lalu diterima", async ({
+  test("langkah 6 + 8: isi kategori dan Meta CAPI (validasi Pixel ID), simpan; tetap setelah muat ulang", async ({
     page,
   }) => {
-    await gotoReady(page, "/projects")
-    await page.getByRole("button", { name: "Proyek baru" }).click()
-    await page.getByRole("dialog", { name: "Proyek baru" }).getByLabel("Nama proyek").fill("Kopi Senja Nusantara")
-    await page.getByRole("button", { name: "Buat proyek" }).click()
-    await expect(page).toHaveURL(/\/projects\/kopi-senja-nusantara\/settings$/)
+    await createProject(page, "Kopi Senja Nusantara", "kopi-senja-nusantara")
 
     const f = fields(page)
     await expect(f.name).toHaveValue("Kopi Senja Nusantara")
@@ -87,7 +94,30 @@ test.describe("UF-01 langkah 6–9: proyek baru sampai uji koneksi", () => {
     await f.token.fill("tokenDariHalamanLain1234")
     await f.testEventCode.fill("TEST55120")
 
-    // Langkah 7, AC 3: Webhook URL disalin satu klik, notifikasi "Tersalin".
+    // Langkah 8: semua kartu disimpan sekaligus.
+    await save(page)
+    await expect(page.getByText("Pengaturan disimpan.").first()).toBeVisible()
+    await expect(f.token).toHaveValue("")
+    await expect(f.token).toHaveAccessibleDescription(/Tersimpan berakhiran 1234\./)
+    await expect(f.test).toHaveAccessibleDescription("Mengirim satu event uji ke Meta dengan Test Event Code TEST55120.")
+
+    // Tersimpan: tetap ada setelah muat ulang, dan kategori baru tampil di Kelola Proyek.
+    await page.reload()
+    await expect(f.category).toHaveText("F&B")
+    await expect(f.pixelId).toHaveValue("731204958162734")
+    await expect(f.testEventCode).toHaveValue("TEST55120")
+    await gotoReady(page, "/projects")
+    const card = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name: "Kopi Senja Nusantara" }) })
+    await expect(card).toContainText("Kategori: F&B")
+  })
+
+  test("langkah 7: salin Webhook URL; secret buatan sistem hanya tampil sekali di dialog", async ({ page }) => {
+    await createProject(page, "Kopi Senja Sentosa", "kopi-senja-sentosa")
+
+    const f = fields(page)
+    await expect(f.webhookSecret).toHaveAccessibleDescription(/Belum ada.*Webhook ditolak sampai secret diisi/)
+
+    // AC 3: Webhook URL disalin satu klik, notifikasi "Tersalin".
     const webhookUrl = await f.webhookUrl.inputValue()
     expect(webhookUrl).toMatch(/^https:\/\/api\.example\.com\/api\/v1\/webhooks\/wa\/[A-Za-z0-9]{32}$/)
     await page.getByRole("main").getByRole("button", { name: "Salin" }).click()
@@ -106,14 +136,19 @@ test.describe("UF-01 langkah 6–9: proyek baru sampai uji koneksi", () => {
     await expect(f.generateSecret).toBeFocused()
     await expect(f.webhookSecret).toHaveAccessibleDescription(/^Tersimpan/)
     expect(await pageContains(page, secret)).toBe(false)
+  })
 
-    // Langkah 8: semua kartu disimpan sekaligus.
+  test("langkah 9: uji koneksi ditolak Meta → perbaiki token (Enter menyimpan) → diterima", async ({ page }) => {
+    await createProject(page, "Kedai Kopi Lereng", "kedai-kopi-lereng")
+
+    const f = fields(page)
+    await f.pixelId.fill("731204958162734")
+    await f.token.fill("tokenDariHalamanLain1234")
+    await f.testEventCode.fill("TEST55120")
     await save(page)
-    await expect(page.getByText("Pengaturan disimpan.").first()).toBeVisible()
-    await expect(f.token).toHaveValue("")
     await expect(f.token).toHaveAccessibleDescription(/Tersimpan berakhiran 1234\./)
 
-    // Langkah 9: Meta menolak token → pesan dari Meta.
+    // Meta menolak token → pesan dari Meta.
     await expect(f.test).toHaveAccessibleDescription("Mengirim satu event uji ke Meta dengan Test Event Code TEST55120.")
     await f.test.click()
     const rejected = page.getByRole("alert").filter({ hasText: "Meta menolak event uji" })
@@ -133,14 +168,9 @@ test.describe("UF-01 langkah 6–9: proyek baru sampai uji koneksi", () => {
     const accepted = page.getByRole("alert").filter({ hasText: "Meta menerima 1 event uji" })
     await expect(accepted).toContainText("Dikirim dengan Test Event Code TEST55120.")
 
-    // Tersimpan: tetap ada setelah muat ulang, dan kategori baru tampil di Kelola Proyek.
+    // Token baru tetap tersimpan setelah muat ulang.
     await page.reload()
-    await expect(f.category).toHaveText("F&B")
-    await expect(f.pixelId).toHaveValue("731204958162734")
-    await expect(f.testEventCode).toHaveValue("TEST55120")
-    await gotoReady(page, "/projects")
-    const card = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name: "Kopi Senja Nusantara" }) })
-    await expect(card).toContainText("Kategori: F&B")
+    await expect(f.token).toHaveAccessibleDescription(/berakhiran 2026\./)
   })
 })
 
