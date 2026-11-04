@@ -26,6 +26,7 @@ SaaS yang mengubah percakapan WhatsApp bisnis menjadi event konversi Meta lewat 
 - Setiap selesai satu tugas: beri ringkasan perubahan, checklist acceptance criteria, dan daftar [asumsi]/Pertanyaan Terbuka yang terkait, lalu berhenti dan tunggu konfirmasi.
 - Saya memakai Windows. Perintah yang kamu sarankan untuk saya jalankan harus bisa jalan di PowerShell (jangan bergantung pada `make`).
 - Jangan pernah commit `.env` atau rahasia apa pun.
+- Jumlah putaran E2E (`npm run test:e2e`, seluruh suite, berturut-turut): untuk fitur biasa cukup 2 putaran penuh yang lolos. Banyak putaran (3–5) hanya untuk menyelidiki uji yang kadang gagal (flaky) atau untuk perubahan berisiko pada komponen bersama (PRD 8.2, `components/ui`, klien API, layout).
 
 ## Aturan frontend (`apps/web`)
 - Halaman dan komponen mengambil data hanya lewat `lib/api`, tidak pernah `fetch` langsung.
