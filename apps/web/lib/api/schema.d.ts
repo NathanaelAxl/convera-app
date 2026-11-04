@@ -330,7 +330,10 @@ export interface paths {
          *     (`used_test_event_code` = `null`) sehingga tercatat sebagai event biasa di Events Manager.
          *
          *     Catatan backend [usulan, perlu konfirmasi]: karena jawaban Meta harus langsung tampil, event uji dikirim
-         *     oleh API (bukan worker) dan tidak dicatat di `events`. Endpoint ini belum punya rate limit di NFR-12.
+         *     oleh API (bukan worker) dan tidak dicatat di `events`.
+         *
+         *     Catatan backend [usulan rate limit, belum ada di NFR-12]: 5 permintaan per menit per proyek; lebih dari itu
+         *     dijawab 429 `RATE_LIMITED`. Alasannya, setiap klik "Uji koneksi" memanggil API Meta.
          */
         post: operations["testProjectCapi"];
         delete?: never;
@@ -633,7 +636,8 @@ export interface components {
             /** @example true */
             has_capi_access_token: boolean;
             /**
-             * @description 8 karakter `•` + 4 karakter terakhir token; `null` bila belum ada token.
+             * @description 8 karakter `•` + 4 karakter terakhir token (AC 2); `null` bila belum ada token. Token yang lebih pendek
+             *     dari 16 karakter hanya ditampilkan sebagai `••••••••` agar tidak terbuka hampir utuh.
              * @example ••••••••Zx9a
              */
             capi_access_token_masked: string | null;
@@ -1322,6 +1326,8 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description Pixel ID atau Access Token belum tersimpan (`details` berisi field `pixel_id` dan/atau `capi_access_token`). */
             422: components["responses"]["ValidationError"];
+            /** @description Lebih dari 5 uji per menit untuk proyek yang sama (`RATE_LIMITED`) [usulan]. */
+            429: components["responses"]["TooManyRequests"];
             /** @description Meta tidak bisa dihubungi (timeout, error jaringan, atau 5xx dari Meta). */
             502: components["responses"]["ExternalServiceError"];
         };
