@@ -77,12 +77,21 @@ export function getErrorMessage(error: unknown) {
 
 /**
  * Menampilkan `error.details` per field di form react-hook-form.
+ * `toFormField` mengubah nama field API ke nama field form, misalnya `slots[1].x` → `slots.1.x`.
  * Mengembalikan `true` bila ada detail yang dipasang ke field.
  */
-export function applyFieldErrors<T extends FieldValues>(error: unknown, setError: UseFormSetError<T>) {
+export function applyFieldErrors<T extends FieldValues>(
+  error: unknown,
+  setError: UseFormSetError<T>,
+  toFormField: (field: string) => string = (field) => field,
+) {
   if (!isApiError(error) || error.details.length === 0) return false
   error.details.forEach((detail, index) => {
-    setError(detail.field as Path<T>, { type: "server", message: detail.message }, { shouldFocus: index === 0 })
+    setError(
+      toFormField(detail.field) as Path<T>,
+      { type: "server", message: detail.message },
+      { shouldFocus: index === 0 },
+    )
   })
   return true
 }
