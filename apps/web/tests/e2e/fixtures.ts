@@ -1,6 +1,13 @@
 import { test as base, expect, type Locator, type Page } from "@playwright/test"
 
-export const BASE_URL = "http://localhost:3000"
+/**
+ * Server yang diuji. Default build produksi (`next build` + `next start` di port 3100): ±2× lebih cepat dari dev server.
+ * `E2E_SERVER=dev` (dipasang oleh `npm run test:e2e:dev`) memakai dev server di port 3000, yang juga menangkap
+ * peringatan React khusus mode pengembangan di console.
+ */
+export const E2E_DEV = process.env.E2E_SERVER === "dev"
+
+export const BASE_URL = E2E_DEV ? "http://localhost:3000" : "http://localhost:3100"
 
 /** Konteks browser tanpa sesi mock (default mock = sudah masuk sebagai Rina). */
 export const SIGNED_OUT = {

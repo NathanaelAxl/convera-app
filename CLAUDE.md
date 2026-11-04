@@ -26,7 +26,7 @@ SaaS yang mengubah percakapan WhatsApp bisnis menjadi event konversi Meta lewat 
 - Setiap selesai satu tugas: beri ringkasan perubahan, checklist acceptance criteria, dan daftar [asumsi]/Pertanyaan Terbuka yang terkait, lalu berhenti dan tunggu konfirmasi.
 - Saya memakai Windows. Perintah yang kamu sarankan untuk saya jalankan harus bisa jalan di PowerShell (jangan bergantung pada `make`).
 - Jangan pernah commit `.env` atau rahasia apa pun.
-- Jumlah putaran E2E (`npm run test:e2e`, seluruh suite, berturut-turut): untuk fitur biasa cukup 2 putaran penuh yang lolos. Banyak putaran (3–5) hanya untuk menyelidiki uji yang kadang gagal (flaky) atau untuk perubahan berisiko pada komponen bersama (PRD 8.2, `components/ui`, klien API, layout).
+- Jumlah putaran E2E (seluruh suite, berturut-turut): untuk fitur biasa cukup 2 putaran penuh `npm run test:e2e` (build produksi) yang lolos, ditambah 1 putaran `npm run test:e2e:dev` (dev server) untuk menangkap peringatan React yang hanya muncul di mode pengembangan. Banyak putaran (3–5) hanya untuk menyelidiki uji yang kadang gagal (flaky) atau untuk perubahan berisiko pada komponen bersama (PRD 8.2, `components/ui`, klien API, layout).
 
 ## Aturan frontend (`apps/web`)
 - Halaman dan komponen mengambil data hanya lewat `lib/api`, tidak pernah `fetch` langsung.
@@ -67,5 +67,8 @@ SaaS yang mengubah percakapan WhatsApp bisnis menjadi event konversi Meta lewat 
 - Typecheck: `npm run typecheck`
 - Build produksi: `npm run build`, lalu `npm run start`
 - Uji unit, klien API, dan mock (Vitest, `tests/**/*.test.ts`): `npm test`; mode watch: `npm run test:watch`
-- Uji E2E (Playwright, `tests/e2e/*.spec.ts`): sekali di awal `npm run test:e2e:install` (mengunduh Chromium), lalu `npm run test:e2e`. Dev server di port 3000 dipakai bila sudah jalan; bila belum, dinyalakan otomatis. Laporan uji yang gagal: `npx playwright show-report`
+- Uji E2E (Playwright, `tests/e2e/*.spec.ts`): sekali di awal `npm run test:e2e:install` (mengunduh Chromium), lalu:
+  - `npm run test:e2e`: default, terhadap build produksi. Setiap kali jalan, `next build` dibuat ulang lalu `next start` di port 3100, dan servernya dimatikan setelah selesai. Port 3100 harus kosong (server lama di port itu tidak dipakai ulang agar tidak menguji build basi).
+  - `npm run test:e2e:dev`: terhadap dev server di port 3000 (dipakai bila sudah jalan, bila belum dinyalakan otomatis). Lebih lambat, tetapi menangkap peringatan React khusus mode pengembangan.
+  - Argumen Playwright diteruskan setelah `--`, misalnya `npm run test:e2e -- tests/e2e/settings.spec.ts`. Laporan uji yang gagal: `npx playwright show-report`
 - Next.js 16.4 berbeda dari versi lama (Cache Components aktif). Baca panduan di `apps/web/node_modules/next/dist/docs/` sebelum memakai API Next.js yang belum pernah dipakai di repo.
