@@ -49,7 +49,11 @@ export function Providers({ children }: { children: ReactNode }) {
       <NuqsAdapter>
         <QueryClientProvider client={getQueryClient()}>
           {children}
-          <Toaster />
+          {/* Toast di bawah layar naik di atas StickySaveBar (bila ada) agar tidak menutupi tombol Simpan. */}
+          <Toaster
+            offset={{ bottom: "calc(24px + var(--sticky-save-bar-height, 0px))" }}
+            mobileOffset={{ bottom: "calc(16px + var(--sticky-save-bar-height, 0px))" }}
+          />
         </QueryClientProvider>
       </NuqsAdapter>
     </ThemeProvider>

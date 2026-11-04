@@ -15,20 +15,25 @@ import type {
 } from "../types"
 import { mockRequireCsrf } from "./csrf"
 import { DEFAULT_MOCK_USER_ID, getMockSessionUserId } from "./session"
-import { mockDelay, mockError, mockValidate } from "./utils"
+import { mockDelay, mockError, mockValidate, randomAlphanumeric } from "./utils"
 
 // "Tabel" projects tiruan di localStorage, berisi proyek semua user, supaya slug unik global (FR-08)
-// dan 404 untuk proyek milik user lain (FR-13) bisa dicoba.
+// dan 404 untuk proyek milik user lain (FR-13) bisa dicoba. Modul `settings` (mocks/settings.ts) memakai tabel yang sama.
 
-type MockProjectRecord = Project & {
+export type MockProjectRecord = Project & {
   user_id: string
   updated_at: string
   pixel_id: string | null
-  has_capi_access_token: boolean
+  /** Di server terenkripsi (`capi_access_token_enc`); mock menyimpannya apa adanya, tetapi tidak pernah mengirimnya utuh. */
+  capi_access_token: string | null
+  test_event_code: string | null
+  /** Di server terenkripsi (`webhook_secret_enc`). */
+  webhook_secret: string | null
   setup_complete: boolean
 }
 
-const PROJECTS_KEY = "convera.mock-projects"
+/** Versi di kunci dinaikkan saat bentuk record berubah, agar data lama di browser tidak terbaca dengan bentuk baru. */
+const PROJECTS_KEY = "convera.mock-projects.v2"
 
 /** Domain API masih placeholder (Pertanyaan Terbuka 1). */
 const WEBHOOK_BASE_URL = "https://api.example.com/api/v1/webhooks/wa/"
@@ -53,7 +58,9 @@ const SEED_PROJECTS: MockProjectRecord[] = [
     user_id: DEFAULT_MOCK_USER_ID,
     updated_at: "2026-11-02T03:16:00Z",
     pixel_id: "123456789012345",
-    has_capi_access_token: true,
+    capi_access_token: "EAAGm0PX4ZCpsBAOZBk7rT2vWq9LdN3hXyQ1sF8uJcV5pR6mK0tZx9a",
+    test_event_code: "TEST48213",
+    webhook_secret: "whsec_9Hf3Kd7Lp2Qx6Rv1Tz8Wb4Nc5Mg0Js",
     setup_complete: false,
   },
   {
@@ -72,7 +79,9 @@ const SEED_PROJECTS: MockProjectRecord[] = [
     user_id: DEFAULT_MOCK_USER_ID,
     updated_at: "2026-10-20T08:12:00Z",
     pixel_id: "987654321098765",
-    has_capi_access_token: true,
+    capi_access_token: "EAAJx3Qm8ZBnW1oBAPk2Lr7Ty5Hs9Vd4Cf6Gu0Ne3Wa8Ki1Mz7Rb2",
+    test_event_code: null,
+    webhook_secret: "whsec_2Bv7Nc4Xz9Lk1Jh6Gf3Ds8Aq5Wr0Ty7",
     setup_complete: true,
   },
   {
@@ -91,7 +100,9 @@ const SEED_PROJECTS: MockProjectRecord[] = [
     user_id: DEFAULT_MOCK_USER_ID,
     updated_at: "2026-09-30T02:45:00Z",
     pixel_id: null,
-    has_capi_access_token: false,
+    capi_access_token: null,
+    test_event_code: null,
+    webhook_secret: null,
     setup_complete: false,
   },
   {
@@ -110,36 +121,30 @@ const SEED_PROJECTS: MockProjectRecord[] = [
     user_id: OTHER_USER_ID,
     updated_at: "2026-11-01T07:00:00Z",
     pixel_id: "556677889900112",
-    has_capi_access_token: true,
+    capi_access_token: "EAAKp4Wn2ZBrT8oBAJm5Qs1Yv7Xc3Hd9Lg6Fe0Ub4Ri2Ot8Na5Kz1",
+    test_event_code: null,
+    webhook_secret: "whsec_6Mq1Wd8Ys3Pk5Lz7Hx0Bv4Ng2Rc9Tj1",
     setup_complete: true,
   },
 ]
 
-function readProjects(): MockProjectRecord[] {
+export function readProjects(): MockProjectRecord[] {
   const raw = window.localStorage.getItem(PROJECTS_KEY)
   return raw ? (JSON.parse(raw) as MockProjectRecord[]) : SEED_PROJECTS
 }
 
-function writeProjects(records: MockProjectRecord[]) {
+export function writeProjects(records: MockProjectRecord[]) {
   window.localStorage.setItem(PROJECTS_KEY, JSON.stringify(records))
 }
 
-function currentUserIdOr401() {
+export function currentUserIdOr401() {
   return getMockSessionUserId() ?? mockError(401, "UNAUTHORIZED")
 }
 
 /** Pemeriksaan kepemilikan seperti `WHERE slug = $1 AND user_id = $2` (NFR-08): milik user lain → 404. */
-function findOwnedOr404(userId: string, slug: string) {
+export function findOwnedOr404(userId: string, slug: string) {
   const record = readProjects().find((project) => project.slug === slug && project.user_id === userId)
   return record ?? mockError(404, "NOT_FOUND", "Proyek tidak ditemukan.")
-}
-
-const ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
-
-function randomWebhookKey() {
-  return Array.from(crypto.getRandomValues(new Uint8Array(32)), (byte) => ALPHANUMERIC[byte % ALPHANUMERIC.length]).join(
-    "",
-  )
 }
 
 function toProject(record: MockProjectRecord): Project {
@@ -173,11 +178,16 @@ function toProject(record: MockProjectRecord): Project {
   }
 }
 
+/** Trial atau langganan habis (Fase 3); mock memakai status yang tersimpan. */
+export function isLocked(record: MockProjectRecord) {
+  return record.subscription_status === "expired"
+}
+
 function toDetail(record: MockProjectRecord): ProjectDetail {
   return {
     ...toProject(record),
-    is_locked: record.subscription_status === "expired",
-    has_capi_access_token: record.has_capi_access_token,
+    is_locked: isLocked(record),
+    has_capi_access_token: record.capi_access_token !== null,
     pixel_id: record.pixel_id,
     setup_complete: record.setup_complete,
   }
@@ -211,7 +221,7 @@ export async function createProject(body: CreateProjectRequest): Promise<Project
     is_active: true,
     wa_connection_type: "waba",
     wa_provider: "generic",
-    webhook_url: `${WEBHOOK_BASE_URL}${randomWebhookKey()}`,
+    webhook_url: `${WEBHOOK_BASE_URL}${randomAlphanumeric(32)}`,
     subscription_status: "trial",
     trial_ends_at: new Date(now.getTime() + 7 * 24 * 60 * 60_000).toISOString(),
     subscription_ends_at: null,
@@ -219,7 +229,9 @@ export async function createProject(body: CreateProjectRequest): Promise<Project
     user_id: userId,
     updated_at: now.toISOString(),
     pixel_id: null,
-    has_capi_access_token: false,
+    capi_access_token: null,
+    test_event_code: null,
+    webhook_secret: null,
     setup_complete: false,
   }
   writeProjects([...records, record])

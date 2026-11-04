@@ -30,5 +30,11 @@ export type BusinessCategory = Schemas["BusinessCategory"]
 export type WaConnectionType = Schemas["WaConnectionType"]
 export type SubscriptionStatus = Schemas["SubscriptionStatus"]
 
+export type WaProvider = Schemas["WaProvider"]
+export type ProjectSettings = Schemas["ProjectSettings"]
+export type UpdateProjectSettingsRequest = Schemas["UpdateProjectSettingsRequest"]
+export type TestCapiResult = Schemas["TestCapiResult"]
+export type WebhookSecretResult = Schemas["WebhookSecretResult"]
+
 /** Hasil daftar berpaginasi: `data` + `meta` (PRD 7.1). */
 export type Paginated<T> = { data: T[]; meta: PaginationMeta }

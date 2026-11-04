@@ -38,3 +38,12 @@ export function createRateLimiter(limit: number, windowMs: number) {
     reset: (key: string) => hits.delete(key),
   }
 }
+
+const ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+/** String acak `[A-Za-z0-9]` dari CSPRNG, misalnya untuk `webhook_key` dan Webhook Secret. */
+export function randomAlphanumeric(length: number) {
+  return Array.from(crypto.getRandomValues(new Uint8Array(length)), (byte) => ALPHANUMERIC[byte % ALPHANUMERIC.length]).join(
+    "",
+  )
+}
